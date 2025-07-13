@@ -5,13 +5,13 @@
 
 rustPlatform.buildRustPackage rec {
   pname = "rudu";
-  version = "0.1.4";
+  version = "0.1.5";
 
   src = fetchFromGitHub {
     owner = "ayungavis";
     repo = "rudu";
-    rev = "v0.1.4";
-    hash = "sha256-e4d9025d2a83a34bf64f339e734e5f20a75fa9249b61d8e16dbbf805e5556072";
+    rev = "v0.1.5";
+    hash = "sha256-f3c9ca1a250c61cec9a8b9a99b9561c48a080efe2ca7649ccb42d106bfa720f1";
   };
 
   cargoHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
