@@ -14,7 +14,7 @@ on:
       repositories:
         description: "Repositories to submit to (comma-separated: crates,homebrew,aur)"
         required: false
-        default: "crates"
+        default: "crates,homebrew,aur"
         type: string
 
 permissions:

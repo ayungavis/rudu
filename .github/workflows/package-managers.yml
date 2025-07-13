@@ -191,6 +191,12 @@ jobs:
           ${{ needs.calculate-checksums.outputs.windows_sha256 }}  rudu-windows-x86_64.zip
           EOF
 
+      - name: Upload generated PKGBUILD
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-pkgbuild
+          path: dist/arch/PKGBUILD
+
       - name: Commit and push changes
         run: |
           VERSION="${{ needs.calculate-checksums.outputs.version }}"
@@ -251,8 +257,11 @@ jobs:
     needs: [calculate-checksums, update-package-configs]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
+      - name: Download generated PKGBUILD
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-pkgbuild
+          path: downloaded-pkgbuild
 
       - name: Create AUR update artifact
         run: |
@@ -260,7 +269,7 @@ jobs:
           VERSION_NUM=${VERSION#v}
 
           mkdir -p aur-update
-          cp dist/arch/PKGBUILD aur-update/
+          cp downloaded-pkgbuild/PKGBUILD aur-update/
 
           # Update PKGBUILD with correct checksums
           cd aur-update
