@@ -1,9 +1,9 @@
-$ErrorActionPreference = 'ade7ffb128f4aa1d5a0d6b04aa597d1f2e9d7444f01889341d37b5da2a2c3910'
+$ErrorActionPreference = '3fcc50f1a2de69d60ddf738058ee3bf8b12127f08468bac1fe423a83883f522d'
 
-$packageName = 'ade7ffb128f4aa1d5a0d6b04aa597d1f2e9d7444f01889341d37b5da2a2c3910'
-$url64 = 'ade7ffb128f4aa1d5a0d6b04aa597d1f2e9d7444f01889341d37b5da2a2c3910'
-$checksum64 = 'ade7ffb128f4aa1d5a0d6b04aa597d1f2e9d7444f01889341d37b5da2a2c3910'
-$checksumType64 = 'ade7ffb128f4aa1d5a0d6b04aa597d1f2e9d7444f01889341d37b5da2a2c3910'
+$packageName = '3fcc50f1a2de69d60ddf738058ee3bf8b12127f08468bac1fe423a83883f522d'
+$url64 = '3fcc50f1a2de69d60ddf738058ee3bf8b12127f08468bac1fe423a83883f522d'
+$checksum64 = '3fcc50f1a2de69d60ddf738058ee3bf8b12127f08468bac1fe423a83883f522d'
+$checksumType64 = '3fcc50f1a2de69d60ddf738058ee3bf8b12127f08468bac1fe423a83883f522d'
 
 $packageArgs = @{
   packageName    = $packageName

@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>rudu</id>
-    <version>0.2.5</version>
+    <version>0.2.6</version>
     <packageSourceUrl>https://github.com/ayungavis/rudu</packageSourceUrl>
     <owners>ayungavis</owners>
     <title>rudu</title>

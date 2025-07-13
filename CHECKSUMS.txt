@@ -1,12 +1,12 @@
-# Checksums for rudu v0.2.5
-# Generated on Sun Jul 13 23:11:53 UTC 2025
+# Checksums for rudu v0.2.6
+# Generated on Sun Jul 13 23:22:29 UTC 2025
 
 ## Source
-e9df1383d177a5e28ce1151b12dde23d6714c3a7fcc22614f3101077bb1dc7cc  rudu-v0.2.5.tar.gz
+658947a3b77a4b7abbf8d4f5636f8879d35cee29b28ea793804eaf6e3a5d20fd  rudu-v0.2.6.tar.gz
 
 ## Release Binaries
-0cf9840ebb4adcdaf3a9063d40ecda8aa232391a2a9c99a849dfa8125a7f3506  rudu-linux-x86_64.tar.gz
-bcee195ae68f73aec335815b286b4ab1bb7813fcc62a6d72211725b14c258ee6  rudu-linux-x86_64-musl.tar.gz
-c0813d1fbe192d5ee8c48cab53f6ce61411dea8e285e69f289f31a776a9e5c57  rudu-macos-x86_64.tar.gz
-7d3d1cdf5d7cb6378ccf53bbcabbf54dc11d1dab928f6765b4ef7a0722b79785  rudu-macos-aarch64.tar.gz
-ade7ffb128f4aa1d5a0d6b04aa597d1f2e9d7444f01889341d37b5da2a2c3910  rudu-windows-x86_64.zip
+085e5b0ec6d869b25cf2f5e5efe750a9736227cf9babeaa6e9b3be55187dbe0a  rudu-linux-x86_64.tar.gz
+00904edd0b95aab74c5b598376e3b1c634b97d1e9afc86846bccdb3f91b615aa  rudu-linux-x86_64-musl.tar.gz
+2ebe151ba32b307fcba1e0d097a13a3ee394fa2fe7cddeca427c4ddd64a75011  rudu-macos-x86_64.tar.gz
+095749b70f6093c446df3ade73cf4788a26e8d1de1134531c4849cf55fdaecfb  rudu-macos-aarch64.tar.gz
+3fcc50f1a2de69d60ddf738058ee3bf8b12127f08468bac1fe423a83883f522d  rudu-windows-x86_64.zip
