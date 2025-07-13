@@ -49,20 +49,20 @@ jobs:
             exit 0
           fi
 
-          # Default to allowing crates submission for any successful workflow
-          echo "can_submit_crates=true" >> $GITHUB_OUTPUT
-
           # Check specific conditions based on triggering workflow
           if [ "${{ github.event.workflow_run.name }}" = "Package Manager Updates" ]; then
-            # After package updates, allow crates but wait for tests for homebrew/aur
+            # After package updates, wait for tests before any submissions
+            echo "can_submit_crates=false" >> $GITHUB_OUTPUT
             echo "can_submit_homebrew=false" >> $GITHUB_OUTPUT
             echo "can_submit_aur=false" >> $GITHUB_OUTPUT
           elif [ "${{ github.event.workflow_run.name }}" = "Test Package Installations" ]; then
-            # After tests pass, allow homebrew and aur submissions
+            # After tests pass, allow all submissions
+            echo "can_submit_crates=true" >> $GITHUB_OUTPUT
             echo "can_submit_homebrew=true" >> $GITHUB_OUTPUT
             echo "can_submit_aur=true" >> $GITHUB_OUTPUT
           else
             # Unknown workflow, be conservative
+            echo "can_submit_crates=false" >> $GITHUB_OUTPUT
             echo "can_submit_homebrew=false" >> $GITHUB_OUTPUT
             echo "can_submit_aur=false" >> $GITHUB_OUTPUT
           fi
@@ -71,7 +71,7 @@ jobs:
     name: Submit to crates.io
     runs-on: ubuntu-latest
     needs: [check-prerequisites]
-    if: always() && (needs.check-prerequisites.outputs.can_submit_crates == 'true' || github.event_name == 'workflow_dispatch')
+    if: always() && (needs.check-prerequisites.outputs.can_submit_crates == 'true' || contains(github.event.inputs.repositories, 'crates') || github.event.inputs.repositories == '')
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
