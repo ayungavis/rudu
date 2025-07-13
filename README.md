@@ -64,7 +64,7 @@ cargo install rudu
 
 ```bash
 # Download the .deb package from releases
-wget https://github.com/ayungavis/rudu/releases/download/v0.1.7/rudu_0.1.0_amd64.deb
+wget https://github.com/ayungavis/rudu/releases/download/v0.1.8/rudu_0.1.0_amd64.deb
 sudo dpkg -i rudu_0.1.0_amd64.deb
 ```
 
@@ -86,7 +86,7 @@ makepkg -si
 
 ```bash
 # Download and run
-wget https://github.com/ayungavis/rudu/releases/download/v0.1.7/rudu-0.1.0-x86_64.AppImage
+wget https://github.com/ayungavis/rudu/releases/download/v0.1.8/rudu-0.1.0-x86_64.AppImage
 chmod +x rudu-0.1.0-x86_64.AppImage
 ./rudu-0.1.0-x86_64.AppImage
 ```
