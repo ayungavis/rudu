@@ -62,8 +62,7 @@ pub fn compute_dir_sizes(base: &Path) -> HashMap<PathBuf, u64> {
 mod tests {
     use super::*;
     use std::fs;
-    use std::io::Write;
-    use tempfile::{tempdir, NamedTempFile};
+    use tempfile::{tempdir};
 
     #[test]
     fn test_empty_dir() {
@@ -77,9 +76,8 @@ mod tests {
     #[test]
     fn test_single_file() {
         let dir = tempdir().unwrap();
-        let mut file = NamedTempFile::new_in(dir.path()).unwrap();
-        write!(file, "hello").unwrap(); // 5 bytes
-        file.flush().unwrap();
+        let file_path = dir.path().join("test.txt");
+        std::fs::write(file_path, "hello").unwrap(); // 5 bytes
 
         let sizes = compute_dir_sizes(dir.path());
         assert_eq!(sizes.get(dir.path()), Some(&5));
@@ -92,13 +90,11 @@ mod tests {
         let b = a.join("b");
         fs::create_dir_all(&b).unwrap();
 
-        let mut f1 = fs::File::create(a.join("foo.txt")).unwrap();
-        write!(f1, "abcd").unwrap(); // 4 bytes
-        f1.flush().unwrap();
+        let file_path_1 = a.join("foo.txt");
+        std::fs::write(file_path_1, "abcd").unwrap(); // 4 bytes
 
-        let mut f2 = fs::File::create(b.join("bar.txt")).unwrap();
-        write!(f2, "xyz").unwrap(); // 3 bytes
-        f2.flush().unwrap();
+        let file_path_2 = b.join("bar.txt");
+        std::fs::write(file_path_2, "xyz").unwrap(); // 3 bytes
 
         let sizes = compute_dir_sizes(dir.path());
         // root: 7 bytes, a: 7 bytes, a/b: 3 bytes
