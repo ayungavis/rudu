@@ -1,0 +1,74 @@
+.TH RUDU 1 "December 2024" "rudu 0.1.0" "User Commands"
+.SH NAME
+rudu \- fast, parallel Rust CLI tool for analyzing directory sizes
+.SH SYNOPSIS
+.B rudu
+[\fIOPTIONS\fR] [\fIPATH\fR]
+.SH DESCRIPTION
+.B rudu
+is a fast, parallel Rust CLI tool for analyzing directory sizes and finding the largest directories under a given path. It provides a modern, performant alternative to the traditional \fBdu\fR command with a focus on identifying space-consuming directories quickly using parallel processing.
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Show help information and exit
+.TP
+.B \-V, \-\-version
+Show version information and exit
+.TP
+.B \-n, \-\-number \fINUMBER\fR
+Number of top results to show (default: 10)
+.SH ARGUMENTS
+.TP
+.B PATH
+Root directory to analyze (default: "/")
+.SH EXAMPLES
+.TP
+.B rudu
+Analyze root directory, show top 10 largest subdirectories
+.TP
+.B rudu .
+Analyze current directory, show top 10 largest subdirectories
+.TP
+.B rudu /home/user/Documents
+Analyze specific directory
+.TP
+.B rudu \-n 20 /var/log
+Show top 20 largest directories in /var/log
+.TP
+.B rudu \-\-number 5 /usr/local
+Show top 5 largest directories with long flag
+.SH OUTPUT FORMAT
+The output shows a numbered list of directories with their sizes in human-readable format (KB, MB, GB, etc.) and their full paths:
+.PP
+.nf
+ 1.    1.2 GB  /home/user/Documents/Videos
+ 2.  456.7 MB  /home/user/Documents/Photos
+ 3.  123.4 MB  /home/user/Documents/Projects
+.fi
+.SH PERFORMANCE
+.B rudu
+uses parallel processing for optimal performance:
+.IP \(bu 2
+Recursive directory traversal using efficient algorithms
+.IP \(bu 2
+Parallel sorting of results for large datasets
+.IP \(bu 2
+Safe symlink handling to prevent infinite loops
+.IP \(bu 2
+Memory usage scales with directory count, not file count
+.SH EXIT STATUS
+.B rudu
+exits with status 0 on success, and >0 if an error occurs.
+.SH AUTHOR
+Written by ayungavis.
+.SH REPORTING BUGS
+Report bugs to: https://github.com/ayungavis/rudu/issues
+.SH COPYRIGHT
+Copyright \(co 2024 ayungavis. License MIT.
+.br
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+.SH SEE ALSO
+.BR du (1),
+.BR find (1),
+.BR ls (1) 
