@@ -96,7 +96,7 @@ jobs:
 
           # Commit and push changes
           git add Formula/rudu.rb
-          git commit -m "Update rudu formula"
+          git commit -m "release: update rudu formula"
           git push
 
   create-aur-submission:
@@ -149,7 +149,7 @@ jobs:
           5. **Submit to AUR:**
              \`\`\`bash
              git add PKGBUILD
-             git commit -m "Update to ${VERSION}"
+             git commit -m "release: update to ${VERSION}"
              git push
              \`\`\`
 

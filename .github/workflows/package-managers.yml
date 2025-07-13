@@ -218,7 +218,7 @@ jobs:
           fi
 
           git add .
-          git commit -m "Update package manager configurations for ${VERSION}" || exit 0
+          git commit -m "release: update package manager configurations for ${VERSION}" || exit 0
           git push origin main
 
   update-homebrew-tap:
@@ -249,7 +249,7 @@ jobs:
           git config --local user.name "GitHub Action"
 
           git add Formula/rudu.rb
-          git commit -m "Update rudu to ${{ needs.calculate-checksums.outputs.version }}" || exit 0
+          git commit -m "release: update rudu to ${{ needs.calculate-checksums.outputs.version }}" || exit 0
           git push
 
   create-aur-pr:
