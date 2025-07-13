@@ -155,14 +155,14 @@ jobs:
           mkdir -p dist/AppDir/usr/bin
           cp target/release/rudu dist/AppDir/usr/bin/
 
-          # Create desktop file
+          # Create desktop file without icon (CLI tool doesn't need one)
           cat > dist/AppDir/rudu.desktop << EOF
           [Desktop Entry]
           Name=rudu
           Exec=rudu
-          Icon=rudu
           Type=Application
           Categories=System;
+          Terminal=true
           EOF
 
           # Create AppRun
