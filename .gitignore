@@ -1,0 +1,7 @@
+/target
+/dist
+*.deb
+*.rpm
+*.AppImage
+*.tar.gz
+*.zip
