@@ -1,8 +1,8 @@
-# Checksums for rudu v0.1.7
-# Generated on Sun Jul 13 21:31:09 UTC 2025
+# Checksums for rudu v0.1.8
+# Generated on Sun Jul 13 21:43:01 UTC 2025
 
 ## Source
-6d2f5992b05a0695a48845dc998e6f7d043556d4d0a24f3b4cefe6450d2792ff  rudu-v0.1.7.tar.gz
+8474fce88c6860e48f1d443c727151b89f3d39fe5656ede54ddb632e11c6d09c  rudu-v0.1.8.tar.gz
 
 ## Release Binaries
 0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5  rudu-linux-x86_64.tar.gz
