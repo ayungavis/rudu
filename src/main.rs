@@ -25,7 +25,11 @@ fn main() {
     let base = match cli.path.canonicalize() {
         Ok(p) => p,
         Err(err) => {
-            eprintln!("Error: failed to resolve path '{}': {}", cli.path.display(), err);
+            eprintln!(
+                "Error: failed to resolve path '{}': {}",
+                cli.path.display(),
+                err
+            );
             process::exit(1);
         }
     };

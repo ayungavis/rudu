@@ -14,7 +14,7 @@ pub fn is_file(entry: &DirEntry) -> bool {
 /// # Arguments
 ///
 /// * `base` - Root path to start scanning. All file sizes under this path
-///            are aggregated for each directory from the file's parent up to `base`.
+///   are aggregated for each directory from the file's parent up to `base`.
 ///
 /// # Returns
 ///
@@ -79,6 +79,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut file = NamedTempFile::new_in(dir.path()).unwrap();
         write!(file, "hello").unwrap(); // 5 bytes
+        file.flush().unwrap();
 
         let sizes = compute_dir_sizes(dir.path());
         assert_eq!(sizes.get(dir.path()), Some(&5));
@@ -93,9 +94,11 @@ mod tests {
 
         let mut f1 = fs::File::create(a.join("foo.txt")).unwrap();
         write!(f1, "abcd").unwrap(); // 4 bytes
+        f1.flush().unwrap();
 
         let mut f2 = fs::File::create(b.join("bar.txt")).unwrap();
         write!(f2, "xyz").unwrap(); // 3 bytes
+        f2.flush().unwrap();
 
         let sizes = compute_dir_sizes(dir.path());
         // root: 7 bytes, a: 7 bytes, a/b: 3 bytes

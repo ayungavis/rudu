@@ -1,6 +1,6 @@
 # rudu
 
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.75+-orange.svg)](https://www.rust-lang.org/)
 [![CI](https://github.com/ayungavis/rudu/workflows/CI/badge.svg)](https://github.com/ayungavis/rudu/actions)
 [![Security Audit](https://github.com/ayungavis/rudu/workflows/Security%20Audit/badge.svg)](https://github.com/ayungavis/rudu/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -189,7 +189,7 @@ Scanning directory: /home/user/Documents
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.75 or later
 - Cargo (comes with Rust)
 
 ### Building
