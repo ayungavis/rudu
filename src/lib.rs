@@ -62,7 +62,7 @@ pub fn compute_dir_sizes(base: &Path) -> HashMap<PathBuf, u64> {
 mod tests {
     use super::*;
     use std::fs;
-    use tempfile::{tempdir};
+    use tempfile::tempdir;
 
     #[test]
     fn test_empty_dir() {
