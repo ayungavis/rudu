@@ -107,9 +107,101 @@ jobs:
           files: ./${{ matrix.name }}.zip
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  build-packages:
+    name: Build Linux Packages
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Create DEB package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Use the package script to create DEB
+          chmod +x scripts/package.sh
+          ./scripts/package.sh deb
+
+          # Rename to match expected format
+          mv dist/rudu_${VERSION}_amd64.deb rudu_${VERSION}_amd64.deb
+
+      - name: Install AppImage dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget file
+
+      - name: Create AppImage
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Create AppDir structure
+          mkdir -p dist/AppDir/usr/bin
+          cp target/release/rudu dist/AppDir/usr/bin/
+
+          # Create desktop file
+          cat > dist/AppDir/rudu.desktop << EOF
+          [Desktop Entry]
+          Name=rudu
+          Exec=rudu
+          Icon=rudu
+          Type=Application
+          Categories=System;
+          EOF
+
+          # Create AppRun
+          cat > dist/AppDir/AppRun << EOF
+          #!/bin/bash
+          SELF=\$(readlink -f "\$0")
+          HERE=\${SELF%/*}
+          export PATH="\${HERE}/usr/bin/:\${PATH}"
+          exec "\${HERE}/usr/bin/rudu" "\$@"
+          EOF
+          chmod +x dist/AppDir/AppRun
+
+          # Download appimagetool
+          wget -O dist/appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x dist/appimagetool
+
+          # Extract appimagetool to avoid FUSE requirement
+          cd dist
+          ./appimagetool --appimage-extract
+
+          # Use the extracted appimagetool
+          ./squashfs-root/AppRun AppDir rudu-${VERSION}-x86_64.AppImage
+          cd ..
+
+      - name: Upload DEB package
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./rudu_${{ steps.version.outputs.version }}_amd64.deb
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload AppImage
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./dist/rudu-${{ steps.version.outputs.version }}-x86_64.AppImage
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   publish-crates:
     name: Publish to Crates.io
-    needs: build-release
+    needs: [build-release, build-packages]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources

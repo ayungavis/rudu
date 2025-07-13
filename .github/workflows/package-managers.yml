@@ -3,6 +3,10 @@ name: Package Manager Updates
 on:
   release:
     types: [created, published]
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       version:
@@ -33,12 +37,17 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for git describe
 
       - name: Get version
         id: version
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
             VERSION="${{ github.event.release.tag_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Get version from the latest tag when triggered by workflow_run
+            VERSION=$(git describe --tags --abbrev=0)
           else
             VERSION="${{ github.event.inputs.version }}"
           fi
