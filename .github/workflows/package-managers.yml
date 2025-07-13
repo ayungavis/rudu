@@ -2,7 +2,7 @@ name: Package Manager Updates
 
 on:
   release:
-    types: [published]
+    types: [created, published]
   workflow_dispatch:
     inputs:
       version:
