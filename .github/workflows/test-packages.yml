@@ -82,10 +82,13 @@ jobs:
           chmod +x scripts/package.sh
           ./scripts/package.sh appimage
 
-          # Test AppImage
+          # Test AppImage extraction (FUSE not available in GitHub Actions)
           chmod +x dist/rudu-*-x86_64.AppImage
-          ./dist/rudu-*-x86_64.AppImage --version
-          ./dist/rudu-*-x86_64.AppImage --help
+          ./dist/rudu-*-x86_64.AppImage --appimage-extract
+
+          # Test the extracted binary
+          ./squashfs-root/usr/bin/rudu --version
+          ./squashfs-root/usr/bin/rudu --help
 
   test-windows-packages:
     name: Test Windows Package Installations
@@ -140,8 +143,16 @@ jobs:
 
       - name: Test Nix build
         run: |
-          # Test building from local expression with nixpkgs
-          nix-build -E 'with import <nixpkgs> {}; callPackage ./nix/rudu.nix {}'
+          # Create a simple shell.nix to test the expression
+          cat > shell.nix << 'EOF'
+          let
+            pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz") {};
+          in
+            pkgs.callPackage ./nix/rudu.nix {}
+          EOF
+
+          # Test building from local expression
+          nix-build shell.nix
 
           # Test the built binary
           ./result/bin/rudu --version
