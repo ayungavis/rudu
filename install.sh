@@ -34,12 +34,17 @@ error() {
 detect_platform() {
     local os=$(uname -s | tr '[:upper:]' '[:lower:]')
     local arch=$(uname -m)
-    
+
     case $os in
         linux*)
             case $arch in
                 x86_64)
-                    echo "rudu-linux-x86_64"
+                    # Check if we should use musl for better compatibility
+                    if should_use_musl; then
+                        echo "rudu-linux-x86_64-musl"
+                    else
+                        echo "rudu-linux-x86_64"
+                    fi
                     ;;
                 *)
                     error "Unsupported architecture: $arch"
@@ -73,6 +78,48 @@ detect_platform() {
             error "Unsupported operating system: $os"
             ;;
     esac
+}
+
+# Check if we should use musl binary for better compatibility
+should_use_musl() {
+    # Check for older distributions that might have glibc compatibility issues
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        case "$ID" in
+            centos|rhel|rocky|almalinux)
+                # Use musl for RHEL-based distributions
+                return 0
+                ;;
+            alpine)
+                # Alpine uses musl by default
+                return 0
+                ;;
+            debian|ubuntu)
+                # Check version for older Debian/Ubuntu
+                case "$VERSION_ID" in
+                    16.04|18.04|8|9)
+                        return 0
+                        ;;
+                esac
+                ;;
+        esac
+    fi
+
+    # Check glibc version if available
+    if command -v ldd >/dev/null 2>&1; then
+        local glibc_version=$(ldd --version 2>/dev/null | head -n1 | grep -o '[0-9]\+\.[0-9]\+' | head -n1)
+        if [ -n "$glibc_version" ]; then
+            # Use musl if glibc is older than 2.31 (approximate threshold)
+            local major=$(echo "$glibc_version" | cut -d. -f1)
+            local minor=$(echo "$glibc_version" | cut -d. -f2)
+            if [ "$major" -lt 2 ] || ([ "$major" -eq 2 ] && [ "$minor" -lt 31 ]); then
+                return 0
+            fi
+        fi
+    fi
+
+    # Default to glibc version
+    return 1
 }
 
 # Get latest release version
@@ -152,6 +199,11 @@ main() {
     local platform=$(detect_platform)
     log "Detected platform: $platform"
 
+    # Provide additional info for musl selection
+    if [[ $platform == *"musl"* ]]; then
+        log "Using musl binary for better compatibility with your system"
+    fi
+
     # Check appropriate extraction tool based on platform
     if [[ $platform == *"windows"* ]]; then
         if ! command -v unzip >/dev/null 2>&1; then
@@ -191,6 +243,9 @@ case "${1:-}" in
         echo ""
         echo "Environment variables:"
         echo "  INSTALL_DIR   Installation directory (default: /usr/local/bin)"
+        echo ""
+        echo "The installer automatically detects your platform and selects the"
+        echo "appropriate binary (glibc or musl) for maximum compatibility."
         echo ""
         echo "Examples:"
         echo "  $0                    # Install to /usr/local/bin"

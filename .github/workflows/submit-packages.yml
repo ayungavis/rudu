@@ -71,7 +71,7 @@ jobs:
     name: Submit to crates.io
     runs-on: ubuntu-latest
     needs: [check-prerequisites]
-    if: always() && (needs.check-prerequisites.outputs.can_submit_crates == 'true' || contains(github.event.inputs.repositories, 'crates') || github.event.inputs.repositories == '')
+    if: always() && (needs.check-prerequisites.outputs.can_submit_crates == 'true' || contains(github.event.inputs.repositories, 'crates'))
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
