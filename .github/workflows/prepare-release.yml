@@ -1,0 +1,162 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.1 - without v prefix)'
+        required: true
+        type: string
+      create_tag:
+        description: 'Create and push git tag after updating version'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PACKAGE_UPDATE_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          
+          # Check if version follows semantic versioning
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "Error: Version must follow semantic versioning (e.g., 1.0.0, 1.0.0-beta.1)"
+            exit 1
+          fi
+          
+          echo "Version format is valid: $VERSION"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update Cargo.toml version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          
+          # Update version in Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          
+          echo "Updated Cargo.toml version to ${VERSION}"
+          
+          # Verify the change
+          grep "^version = " Cargo.toml
+
+      - name: Update version in README badges
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          
+          # Update version references in README if they exist
+          if grep -q "releases/download/v" README.md; then
+            sed -i "s|releases/download/v[0-9.]*|releases/download/v${VERSION}|g" README.md
+            echo "Updated version references in README.md"
+          fi
+
+      - name: Run cargo check
+        run: |
+          # Ensure the project still builds with the new version
+          cargo check
+          echo "Cargo check passed with new version"
+
+      - name: Update Cargo.lock
+        run: |
+          # Update Cargo.lock with new version
+          cargo update --package rudu
+          echo "Updated Cargo.lock"
+
+      - name: Commit version changes
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Check if there are any changes to commit
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git add Cargo.toml Cargo.lock README.md
+          git commit -m "Bump version to ${VERSION}"
+          git push origin main
+          
+          echo "Version changes committed and pushed"
+
+      - name: Create and push tag
+        if: github.event.inputs.create_tag == 'true'
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          TAG="v${VERSION}"
+          
+          # Check if tag already exists
+          if git tag -l | grep -q "^${TAG}$"; then
+            echo "Tag ${TAG} already exists"
+            exit 1
+          fi
+          
+          # Create and push tag
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+          
+          echo "Created and pushed tag: ${TAG}"
+
+      - name: Create release summary
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          TAG="v${VERSION}"
+          
+          echo "## Release Preparation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** ${TAG}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Changes Made" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Updated Cargo.toml version" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Updated Cargo.lock" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Updated README.md version references (if any)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Verified project builds with new version" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Committed and pushed changes" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.create_tag }}" = "true" ]; then
+            echo "- ✅ Created and pushed git tag: ${TAG}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ Git tag creation skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.create_tag }}" = "true" ]; then
+            echo "1. 🚀 **Create GitHub Release** using tag ${TAG}" >> $GITHUB_STEP_SUMMARY
+            echo "2. 📦 **Package Manager Updates** workflow will run automatically" >> $GITHUB_STEP_SUMMARY
+            echo "3. 🚀 **Submit to Package Repositories** workflow will run automatically" >> $GITHUB_STEP_SUMMARY
+            echo "4. 🧪 **Test Package Installations** workflow will run automatically" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "1. 🏷️ **Create git tag manually:** \`git tag -a ${TAG} -m 'Release ${TAG}' && git push origin ${TAG}\`" >> $GITHUB_STEP_SUMMARY
+            echo "2. 🚀 **Create GitHub Release** using the tag" >> $GITHUB_STEP_SUMMARY
+            echo "3. 📦 **Automation workflows** will run after release creation" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Manual Release Creation" >> $GITHUB_STEP_SUMMARY
+          echo "If you prefer to create the release manually:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "gh release create ${TAG} --title '${TAG}' --generate-notes" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

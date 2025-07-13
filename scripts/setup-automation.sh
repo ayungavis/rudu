@@ -136,6 +136,26 @@ setup_secrets() {
         fi
     fi
     
+    # PACKAGE_UPDATE_TOKEN (recommended)
+    if gh secret list | grep -q "PACKAGE_UPDATE_TOKEN"; then
+        info "PACKAGE_UPDATE_TOKEN secret already exists"
+    else
+        warn "PACKAGE_UPDATE_TOKEN secret not found (recommended)"
+        echo "For automatic version updates and package configuration commits, you should add a personal access token."
+        echo "This allows the workflow to push changes back to the repository."
+        echo ""
+        read -p "Do you want to set PACKAGE_UPDATE_TOKEN? (Y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            echo "1. Go to https://github.com/settings/tokens"
+            echo "2. Generate a new token with 'repo' permissions"
+            echo "3. Enter the token below:"
+            read -s PACKAGE_UPDATE_TOKEN
+            echo "$PACKAGE_UPDATE_TOKEN" | gh secret set PACKAGE_UPDATE_TOKEN
+            log "PACKAGE_UPDATE_TOKEN secret set"
+        fi
+    fi
+
     # HOMEBREW_TAP_TOKEN (optional)
     if gh secret list | grep -q "HOMEBREW_TAP_TOKEN"; then
         info "HOMEBREW_TAP_TOKEN secret already exists"
@@ -169,6 +189,7 @@ test_workflows() {
     
     # Check if our workflows exist
     WORKFLOWS=(
+        "prepare-release.yml"
         "package-managers.yml"
         "submit-packages.yml"
         "test-packages.yml"
@@ -196,15 +217,18 @@ show_summary() {
     info "Homebrew Tap: $REPO_OWNER/homebrew-tap"
     echo ""
     echo "Next Steps:"
-    echo "1. Create a release to trigger the automation workflows"
-    echo "2. Monitor workflow runs in the GitHub Actions tab"
-    echo "3. Download artifacts for manual package submissions"
-    echo "4. Check docs/AUTOMATION.md for detailed usage instructions"
+    echo "1. Prepare a release with version update:"
+    echo "   gh workflow run prepare-release.yml -f version=0.1.1 -f create_tag=true"
+    echo "2. Create a GitHub release using the created tag"
+    echo "3. Monitor automation workflows in the GitHub Actions tab"
+    echo "4. Download artifacts for manual package submissions"
+    echo "5. Check docs/AUTOMATION.md for detailed usage instructions"
     echo ""
     echo "Manual Workflow Triggers:"
-    echo "  gh workflow run package-managers.yml -f version=v0.1.0"
-    echo "  gh workflow run submit-packages.yml -f version=v0.1.0"
-    echo "  gh workflow run test-packages.yml -f version=v0.1.0"
+    echo "  gh workflow run prepare-release.yml -f version=0.1.1"
+    echo "  gh workflow run package-managers.yml -f version=v0.1.1"
+    echo "  gh workflow run submit-packages.yml -f version=v0.1.1"
+    echo "  gh workflow run test-packages.yml -f version=v0.1.1"
     echo ""
     echo "For more information, see: docs/AUTOMATION.md"
     echo "=========================================="

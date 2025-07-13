@@ -13,6 +13,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -89,7 +90,19 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PACKAGE_UPDATE_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Update Cargo.toml version
+        run: |
+          VERSION="${{ needs.calculate-checksums.outputs.version }}"
+          VERSION_NUM=${VERSION#v}
+
+          # Update version in Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"${VERSION_NUM}\"/" Cargo.toml
+
+          echo "Updated Cargo.toml version to ${VERSION_NUM}"
 
       - name: Update Homebrew formula
         run: |
@@ -185,9 +198,22 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
 
+          # Ensure we're on the main branch
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$CURRENT_BRANCH" = "HEAD" ]; then
+            # We're in detached HEAD, checkout main branch
+            git checkout main
+          fi
+
+          # Check if there are any changes to commit
+          if git diff --staged --quiet && git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
           git add .
           git commit -m "Update package manager configurations for ${VERSION}" || exit 0
-          git push
+          git push origin main
 
   update-homebrew-tap:
     name: Update Homebrew Tap
