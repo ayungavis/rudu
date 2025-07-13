@@ -155,11 +155,15 @@ jobs:
           mkdir -p dist/AppDir/usr/bin
           cp target/release/rudu dist/AppDir/usr/bin/
 
-          # Create desktop file without icon (CLI tool doesn't need one)
+          # Create a simple icon using base64 encoded PNG data
+          echo 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==' | base64 -d > dist/AppDir/rudu.png
+
+          # Create desktop file
           cat > dist/AppDir/rudu.desktop << EOF
           [Desktop Entry]
           Name=rudu
           Exec=rudu
+          Icon=rudu
           Type=Application
           Categories=System;
           Terminal=true
@@ -199,19 +203,19 @@ jobs:
           files: ./dist/rudu-${{ steps.version.outputs.version }}-x86_64.AppImage
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  publish-crates:
-    name: Publish to Crates.io
-    needs: [build-release, build-packages]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
+  # publish-crates:
+  #   name: Publish to Crates.io
+  #   needs: [build-release, build-packages]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout sources
+  #       uses: actions/checkout@v4
 
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
+  #     - name: Install stable toolchain
+  #       uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+  #     - name: Cache dependencies
+  #       uses: Swatinem/rust-cache@v2
 
-      - name: Publish to crates.io
-        run: cargo publish --token ${{ secrets.CRATES_TOKEN }}
+  #     - name: Publish to crates.io
+  #       run: cargo publish --token ${{ secrets.CRATES_TOKEN }}
