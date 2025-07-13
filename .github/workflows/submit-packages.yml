@@ -1,0 +1,315 @@
+name: Submit to Package Repositories
+
+on:
+  workflow_run:
+    workflows: ["Package Manager Updates"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to submit (e.g., v0.1.0)'
+        required: true
+        type: string
+      repositories:
+        description: 'Repositories to submit to (comma-separated: crates,homebrew,aur)'
+        required: false
+        default: 'crates'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  submit-to-crates:
+    name: Submit to crates.io
+    runs-on: ubuntu-latest
+    if: contains(github.event.inputs.repositories, 'crates') || github.event.inputs.repositories == ''
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check if version exists on crates.io
+        id: check_version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          
+          # Check if this version already exists
+          if cargo search rudu | grep -q "rudu = \"$VERSION\""; then
+            echo "Version $VERSION already exists on crates.io"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version $VERSION not found on crates.io, proceeding with publish"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to crates.io
+        if: steps.check_version.outputs.skip == 'false'
+        run: |
+          # Dry run first
+          cargo publish --dry-run
+          
+          # Actual publish
+          cargo publish --token ${{ secrets.CRATES_TOKEN }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+
+  submit-to-homebrew-tap:
+    name: Submit to Homebrew Tap
+    runs-on: ubuntu-latest
+    if: contains(github.event.inputs.repositories, 'homebrew')
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v4
+        with:
+          path: rudu
+
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: ayungavis/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update and submit tap
+        run: |
+          # Copy updated formula
+          cp rudu/homebrew/rudu.rb homebrew-tap/Formula/
+          
+          cd homebrew-tap
+          
+          # Configure git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Check if there are changes
+          if git diff --quiet Formula/rudu.rb; then
+            echo "No changes to formula, skipping update"
+            exit 0
+          fi
+          
+          # Commit and push changes
+          git add Formula/rudu.rb
+          git commit -m "Update rudu formula"
+          git push
+
+  create-aur-submission:
+    name: Create AUR Submission
+    runs-on: ubuntu-latest
+    if: contains(github.event.inputs.repositories, 'aur')
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Generate AUR package
+        run: |
+          chmod +x scripts/package.sh
+          ./scripts/package.sh arch
+
+      - name: Create AUR submission instructions
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          
+          cat > aur-submission-instructions.md << EOF
+          # AUR Submission Instructions for rudu ${VERSION}
+          
+          ## Automated Steps Completed
+          - ✅ PKGBUILD generated and updated
+          - ✅ Version and checksums calculated
+          
+          ## Manual Steps Required
+          
+          1. **Clone AUR repository:**
+             \`\`\`bash
+             git clone ssh://aur@aur.archlinux.org/rudu.git
+             cd rudu
+             \`\`\`
+          
+          2. **Copy the generated PKGBUILD:**
+             \`\`\`bash
+             cp dist/arch/PKGBUILD .
+             \`\`\`
+          
+          3. **Update checksums:**
+             \`\`\`bash
+             updpkgsums
+             \`\`\`
+          
+          4. **Test the build:**
+             \`\`\`bash
+             makepkg -si
+             \`\`\`
+          
+          5. **Submit to AUR:**
+             \`\`\`bash
+             git add PKGBUILD
+             git commit -m "Update to ${VERSION}"
+             git push
+             \`\`\`
+          
+          ## Generated PKGBUILD
+          
+          \`\`\`bash
+          $(cat dist/arch/PKGBUILD)
+          \`\`\`
+          EOF
+
+      - name: Upload AUR submission artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aur-submission-${{ github.event.inputs.version || github.ref_name }}
+          path: |
+            dist/arch/PKGBUILD
+            aur-submission-instructions.md
+
+  create-package-submission-guide:
+    name: Create Package Submission Guide
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Generate submission guide
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          
+          cat > package-submission-guide.md << EOF
+          # Package Submission Guide for rudu ${VERSION}
+          
+          This guide contains instructions for submitting rudu to various package repositories.
+          
+          ## Automated Submissions ✅
+          
+          The following have been automated via GitHub Actions:
+          - **crates.io**: Automatically published when workflow runs
+          - **Homebrew Tap**: Automatically updated in ayungavis/homebrew-tap
+          
+          ## Manual Submissions Required 📋
+          
+          ### 1. Scoop (Windows)
+          
+          **Repository:** https://github.com/ScoopInstaller/Extras
+          
+          **Steps:**
+          1. Fork the scoop-extras repository
+          2. Copy \`scoop/rudu.json\` to \`bucket/rudu.json\`
+          3. Update checksums if needed
+          4. Submit PR with title: "rudu: Update to ${VERSION}"
+          
+          ### 2. Chocolatey (Windows)
+          
+          **Repository:** https://community.chocolatey.org/
+          
+          **Steps:**
+          1. Create account on chocolatey.org
+          2. Package the \`chocolatey/\` directory contents
+          3. Submit for moderation review
+          4. Wait for approval (can take several days)
+          
+          ### 3. Arch Linux (AUR)
+          
+          **Repository:** https://aur.archlinux.org/
+          
+          **Steps:**
+          1. Download the AUR submission artifact from this workflow
+          2. Follow the instructions in \`aur-submission-instructions.md\`
+          3. Requires AUR account and SSH key setup
+          
+          ### 4. Debian/Ubuntu Official Repositories
+          
+          **Process:** Long-term, requires sponsorship
+          
+          **Steps:**
+          1. Create source package: \`./scripts/package.sh deb\`
+          2. Follow Debian New Maintainer Guide
+          3. Find a sponsor for package review
+          4. Submit to Debian mentors
+          
+          ### 5. Fedora/RHEL Official Repositories
+          
+          **Process:** Requires Fedora account and review
+          
+          **Steps:**
+          1. Create RPM spec: \`./scripts/package.sh rpm\`
+          2. Submit package review request
+          3. Address reviewer feedback
+          4. Get package approved and imported
+          
+          ### 6. Nix/NixOS
+          
+          **Repository:** https://github.com/NixOS/nixpkgs
+          
+          **Steps:**
+          1. Fork nixpkgs repository
+          2. Add \`nix/rudu.nix\` to \`pkgs/tools/system/rudu/default.nix\`
+          3. Add entry to \`pkgs/top-level/all-packages.nix\`
+          4. Submit PR with title: "rudu: init at ${VERSION}"
+          
+          ## Verification
+          
+          After submission, verify installations work:
+          
+          \`\`\`bash
+          # Test different installation methods
+          cargo install rudu
+          brew install ayungavis/tap/rudu
+          scoop install rudu
+          choco install rudu
+          nix-env -iA nixpkgs.rudu
+          \`\`\`
+          
+          ## Checksums for ${VERSION}
+          
+          \`\`\`
+          $(cat CHECKSUMS.txt 2>/dev/null || echo "Run package-managers workflow to generate checksums")
+          \`\`\`
+          EOF
+
+      - name: Upload submission guide
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-submission-guide-${{ github.event.inputs.version || github.ref_name }}
+          path: package-submission-guide.md
+
+  notify-completion:
+    name: Notify Completion
+    runs-on: ubuntu-latest
+    needs: [submit-to-crates, submit-to-homebrew-tap, create-aur-submission, create-package-submission-guide]
+    if: always()
+    steps:
+      - name: Create summary
+        run: |
+          echo "## Package Submission Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Automated Submissions" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.submit-to-crates.result }}" = "success" ]; then
+            echo "- ✅ **crates.io**: Successfully published" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.submit-to-crates.result }}" = "skipped" ]; then
+            echo "- ⏭️ **crates.io**: Skipped (not requested)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **crates.io**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.submit-to-homebrew-tap.result }}" = "success" ]; then
+            echo "- ✅ **Homebrew Tap**: Successfully updated" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.submit-to-homebrew-tap.result }}" = "skipped" ]; then
+            echo "- ⏭️ **Homebrew Tap**: Skipped (not requested)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **Homebrew Tap**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Manual Submissions Required" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 **AUR**: Check artifacts for submission instructions" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 **Scoop**: Submit PR to scoop-extras" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 **Chocolatey**: Submit to chocolatey.org" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 **Nix**: Submit PR to nixpkgs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 **Download the package submission guide artifact for detailed instructions**" >> $GITHUB_STEP_SUMMARY

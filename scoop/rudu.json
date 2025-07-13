@@ -1,0 +1,25 @@
+{
+    "version": "0.1.0",
+    "description": "Fast, parallel Rust CLI tool for analyzing directory sizes",
+    "homepage": "https://github.com/ayungavis/rudu",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/ayungavis/rudu/releases/download/v0.1.0/rudu-windows-x86_64.zip",
+            "hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "extract_dir": "rudu-windows-x86_64"
+        }
+    },
+    "bin": "rudu.exe",
+    "checkver": {
+        "github": "https://github.com/ayungavis/rudu"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/ayungavis/rudu/releases/download/v$version/rudu-windows-x86_64.zip",
+                "extract_dir": "rudu-windows-x86_64"
+            }
+        }
+    }
+}

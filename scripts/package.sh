@@ -207,16 +207,60 @@ EOF
     log "AppImage created: dist/$BINARY_NAME-$VERSION-x86_64.AppImage"
 }
 
+# Calculate checksums for releases
+calculate_checksums() {
+    log "Calculating checksums for release assets..."
+
+    local base_url="https://github.com/ayungavis/rudu"
+
+    echo "# Checksums for rudu v$VERSION"
+    echo "# Generated on $(date)"
+    echo ""
+
+    # Source tarball
+    echo "## Source"
+    local source_url="$base_url/archive/v$VERSION.tar.gz"
+    echo "URL: $source_url"
+    if command -v curl >/dev/null 2>&1; then
+        local source_sha=$(curl -sL "$source_url" | shasum -a 256 | cut -d' ' -f1)
+        echo "SHA256: $source_sha"
+    else
+        echo "SHA256: (curl not available - calculate manually)"
+    fi
+    echo ""
+
+    # Release binaries
+    echo "## Release Binaries"
+    for asset in \
+        "rudu-linux-x86_64.tar.gz" \
+        "rudu-linux-x86_64-musl.tar.gz" \
+        "rudu-macos-x86_64.tar.gz" \
+        "rudu-macos-aarch64.tar.gz" \
+        "rudu-windows-x86_64.zip"
+    do
+        local asset_url="$base_url/releases/download/v$VERSION/$asset"
+        echo "Asset: $asset"
+        echo "URL: $asset_url"
+        if command -v curl >/dev/null 2>&1; then
+            local asset_sha=$(curl -sL "$asset_url" | shasum -a 256 | cut -d' ' -f1)
+            echo "SHA256: $asset_sha"
+        else
+            echo "SHA256: (curl not available - calculate manually)"
+        fi
+        echo ""
+    done
+}
+
 # Main function
 main() {
     log "Creating packages for $BINARY_NAME v$VERSION..."
-    
+
     # Create dist directory
     mkdir -p "$PROJECT_DIR/dist"
-    
+
     # Build binary
     build_binary
-    
+
     # Create packages based on arguments
     case "${1:-all}" in
         deb)
@@ -231,6 +275,9 @@ main() {
         appimage)
             create_appimage
             ;;
+        checksums)
+            calculate_checksums
+            ;;
         all)
             create_deb
             create_rpm_spec
@@ -238,11 +285,11 @@ main() {
             create_appimage
             ;;
         *)
-            echo "Usage: $0 [deb|rpm|arch|appimage|all]"
+            echo "Usage: $0 [deb|rpm|arch|appimage|checksums|all]"
             exit 1
             ;;
     esac
-    
+
     log "Packaging complete!"
 }
 

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>rudu</id>
+    <version>0.1.0</version>
+    <packageSourceUrl>https://github.com/ayungavis/rudu</packageSourceUrl>
+    <owners>ayungavis</owners>
+    <title>rudu</title>
+    <authors>Wahyu Kurniawan</authors>
+    <projectUrl>https://github.com/ayungavis/rudu</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/ayungavis/rudu/main/docs/icon.png</iconUrl>
+    <copyright>2025 Wahyu Kurniawan</copyright>
+    <licenseUrl>https://github.com/ayungavis/rudu/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/ayungavis/rudu</projectSourceUrl>
+    <docsUrl>https://github.com/ayungavis/rudu/blob/main/README.md</docsUrl>
+    <bugTrackerUrl>https://github.com/ayungavis/rudu/issues</bugTrackerUrl>
+    <tags>cli directory disk usage filesystem rust</tags>
+    <summary>Fast, parallel Rust CLI tool for analyzing directory sizes</summary>
+    <description>
+A modern, performant alternative to du with a focus on identifying space-consuming directories quickly using parallel processing.
+
+## Features
+- Fast parallel processing using Rayon for concurrent directory traversal
+- Human-readable output with formatted file sizes (KB, MB, GB, etc.)
+- Top-N results - show only the largest directories that matter
+- Safe symlink handling - doesn't follow symbolic links to prevent infinite loops
+- Flexible path input - analyze any directory, defaults to root (/)
+- Simple CLI interface with sensible defaults
+    </description>
+    <releaseNotes>https://github.com/ayungavis/rudu/releases/tag/v0.1.0</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

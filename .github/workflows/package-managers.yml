@@ -1,0 +1,306 @@
+name: Package Manager Updates
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to update (e.g., v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  calculate-checksums:
+    name: Calculate Release Checksums
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha256: ${{ steps.checksums.outputs.source_sha256 }}
+      linux_x86_64_sha256: ${{ steps.checksums.outputs.linux_x86_64_sha256 }}
+      linux_musl_sha256: ${{ steps.checksums.outputs.linux_musl_sha256 }}
+      macos_x86_64_sha256: ${{ steps.checksums.outputs.macos_x86_64_sha256 }}
+      macos_aarch64_sha256: ${{ steps.checksums.outputs.macos_aarch64_sha256 }}
+      windows_sha256: ${{ steps.checksums.outputs.windows_sha256 }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Calculate checksums
+        id: checksums
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BASE_URL="https://github.com/${{ github.repository }}"
+
+          echo "Calculating checksums for version ${VERSION}..."
+
+          # Source tarball
+          SOURCE_URL="${BASE_URL}/archive/${VERSION}.tar.gz"
+          SOURCE_SHA256=$(curl -sL "${SOURCE_URL}" | sha256sum | cut -d' ' -f1)
+          echo "source_sha256=${SOURCE_SHA256}" >> $GITHUB_OUTPUT
+          echo "Source SHA256: ${SOURCE_SHA256}"
+
+          # Release binaries
+          LINUX_X86_64_URL="${BASE_URL}/releases/download/${VERSION}/rudu-linux-x86_64.tar.gz"
+          LINUX_X86_64_SHA256=$(curl -sL "${LINUX_X86_64_URL}" | sha256sum | cut -d' ' -f1)
+          echo "linux_x86_64_sha256=${LINUX_X86_64_SHA256}" >> $GITHUB_OUTPUT
+
+          LINUX_MUSL_URL="${BASE_URL}/releases/download/${VERSION}/rudu-linux-x86_64-musl.tar.gz"
+          LINUX_MUSL_SHA256=$(curl -sL "${LINUX_MUSL_URL}" | sha256sum | cut -d' ' -f1)
+          echo "linux_musl_sha256=${LINUX_MUSL_SHA256}" >> $GITHUB_OUTPUT
+
+          MACOS_X86_64_URL="${BASE_URL}/releases/download/${VERSION}/rudu-macos-x86_64.tar.gz"
+          MACOS_X86_64_SHA256=$(curl -sL "${MACOS_X86_64_URL}" | sha256sum | cut -d' ' -f1)
+          echo "macos_x86_64_sha256=${MACOS_X86_64_SHA256}" >> $GITHUB_OUTPUT
+
+          MACOS_AARCH64_URL="${BASE_URL}/releases/download/${VERSION}/rudu-macos-aarch64.tar.gz"
+          MACOS_AARCH64_SHA256=$(curl -sL "${MACOS_AARCH64_URL}" | sha256sum | cut -d' ' -f1)
+          echo "macos_aarch64_sha256=${MACOS_AARCH64_SHA256}" >> $GITHUB_OUTPUT
+
+          WINDOWS_URL="${BASE_URL}/releases/download/${VERSION}/rudu-windows-x86_64.zip"
+          WINDOWS_SHA256=$(curl -sL "${WINDOWS_URL}" | sha256sum | cut -d' ' -f1)
+          echo "windows_sha256=${WINDOWS_SHA256}" >> $GITHUB_OUTPUT
+
+          echo "All checksums calculated successfully"
+
+  update-package-configs:
+    name: Update Package Manager Configurations
+    needs: calculate-checksums
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew formula
+        run: |
+          VERSION="${{ needs.calculate-checksums.outputs.version }}"
+          SOURCE_SHA256="${{ needs.calculate-checksums.outputs.source_sha256 }}"
+
+          # Remove 'v' prefix for version number
+          VERSION_NUM=${VERSION#v}
+
+          # Update Homebrew formula
+          sed -i "s/version \".*\"/version \"${VERSION_NUM}\"/" homebrew/rudu.rb
+          sed -i "s|url \".*\"|url \"https://github.com/${{ github.repository }}/archive/${VERSION}.tar.gz\"|" homebrew/rudu.rb
+          sed -i "s/sha256 \".*\"/sha256 \"${SOURCE_SHA256}\"/" homebrew/rudu.rb
+
+      - name: Update Scoop manifest
+        run: |
+          VERSION="${{ needs.calculate-checksums.outputs.version }}"
+          WINDOWS_SHA256="${{ needs.calculate-checksums.outputs.windows_sha256 }}"
+
+          # Remove 'v' prefix for version number
+          VERSION_NUM=${VERSION#v}
+
+          # Update Scoop manifest
+          sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION_NUM}\"/" scoop/rudu.json
+          sed -i "s|\"url\": \".*\"|\"url\": \"https://github.com/${{ github.repository }}/releases/download/${VERSION}/rudu-windows-x86_64.zip\"|" scoop/rudu.json
+          sed -i "s/\"hash\": \".*\"/\"hash\": \"sha256:${WINDOWS_SHA256}\"/" scoop/rudu.json
+
+      - name: Update Chocolatey package
+        run: |
+          VERSION="${{ needs.calculate-checksums.outputs.version }}"
+          WINDOWS_SHA256="${{ needs.calculate-checksums.outputs.windows_sha256 }}"
+
+          # Remove 'v' prefix for version number
+          VERSION_NUM=${VERSION#v}
+
+          # Update Chocolatey nuspec
+          sed -i "s/<version>.*<\/version>/<version>${VERSION_NUM}<\/version>/" chocolatey/rudu.nuspec
+
+          # Update Chocolatey install script
+          sed -i "s|\\$url64 = '.*'|\\$url64 = 'https://github.com/${{ github.repository }}/releases/download/${VERSION}/rudu-windows-x86_64.zip'|" chocolatey/tools/chocolateyinstall.ps1
+          sed -i "s/\\$checksum64 = '.*'/\\$checksum64 = '${WINDOWS_SHA256}'/" chocolatey/tools/chocolateyinstall.ps1
+
+      - name: Update Nix expression
+        run: |
+          VERSION="${{ needs.calculate-checksums.outputs.version }}"
+          SOURCE_SHA256="${{ needs.calculate-checksums.outputs.source_sha256 }}"
+
+          # Remove 'v' prefix for version number
+          VERSION_NUM=${VERSION#v}
+
+          # Update Nix expression
+          sed -i "s/version = \".*\"/version = \"${VERSION_NUM}\"/" nix/rudu.nix
+          sed -i "s/rev = \".*\"/rev = \"${VERSION}\"/" nix/rudu.nix
+          sed -i "s/hash = \".*\"/hash = \"sha256-${SOURCE_SHA256}\"/" nix/rudu.nix
+
+      - name: Generate Linux packages
+        run: |
+          VERSION="${{ needs.calculate-checksums.outputs.version }}"
+          VERSION_NUM=${VERSION#v}
+
+          # Update version in package script
+          export VERSION=${VERSION_NUM}
+
+          # Generate package configurations
+          chmod +x scripts/package.sh
+          ./scripts/package.sh deb
+          ./scripts/package.sh rpm
+          ./scripts/package.sh arch
+
+      - name: Create checksums file
+        run: |
+          VERSION="${{ needs.calculate-checksums.outputs.version }}"
+
+          cat > CHECKSUMS.txt << EOF
+          # Checksums for rudu ${VERSION}
+          # Generated on $(date)
+
+          ## Source
+          ${{ needs.calculate-checksums.outputs.source_sha256 }}  rudu-${VERSION}.tar.gz
+
+          ## Release Binaries
+          ${{ needs.calculate-checksums.outputs.linux_x86_64_sha256 }}  rudu-linux-x86_64.tar.gz
+          ${{ needs.calculate-checksums.outputs.linux_musl_sha256 }}  rudu-linux-x86_64-musl.tar.gz
+          ${{ needs.calculate-checksums.outputs.macos_x86_64_sha256 }}  rudu-macos-x86_64.tar.gz
+          ${{ needs.calculate-checksums.outputs.macos_aarch64_sha256 }}  rudu-macos-aarch64.tar.gz
+          ${{ needs.calculate-checksums.outputs.windows_sha256 }}  rudu-windows-x86_64.zip
+          EOF
+
+      - name: Commit and push changes
+        run: |
+          VERSION="${{ needs.calculate-checksums.outputs.version }}"
+
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          git add .
+          git commit -m "Update package manager configurations for ${VERSION}" || exit 0
+          git push
+
+  update-homebrew-tap:
+    name: Update Homebrew Tap
+    needs: [calculate-checksums, update-package-configs]
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'ayungavis'
+    steps:
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: ayungavis/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
+          path: homebrew-tap
+
+      - name: Checkout main repository
+        uses: actions/checkout@v4
+        with:
+          path: rudu
+
+      - name: Update tap formula
+        run: |
+          # Copy updated formula to tap
+          cp rudu/homebrew/rudu.rb homebrew-tap/Formula/
+
+          cd homebrew-tap
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          git add Formula/rudu.rb
+          git commit -m "Update rudu to ${{ needs.calculate-checksums.outputs.version }}" || exit 0
+          git push
+
+  create-aur-pr:
+    name: Create AUR Package Update
+    needs: [calculate-checksums, update-package-configs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Create AUR update artifact
+        run: |
+          VERSION="${{ needs.calculate-checksums.outputs.version }}"
+          VERSION_NUM=${VERSION#v}
+
+          mkdir -p aur-update
+          cp dist/arch/PKGBUILD aur-update/
+
+          # Update PKGBUILD with correct checksums
+          cd aur-update
+
+          # Calculate source checksum for AUR
+          SOURCE_SHA256="${{ needs.calculate-checksums.outputs.source_sha256 }}"
+          sed -i "s/sha256sums=('SKIP')/sha256sums=('${SOURCE_SHA256}')/" PKGBUILD
+
+          echo "AUR PKGBUILD updated for version ${VERSION_NUM}"
+          cat PKGBUILD
+
+      - name: Upload AUR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aur-pkgbuild-${{ needs.calculate-checksums.outputs.version }}
+          path: aur-update/PKGBUILD
+
+  create-release-summary:
+    name: Create Release Summary
+    needs: [calculate-checksums, update-package-configs, update-homebrew-tap, create-aur-pr]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Create workflow summary
+        run: |
+          echo "## Package Manager Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.calculate-checksums.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Checksums Calculated ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Source: \`${{ needs.calculate-checksums.outputs.source_sha256 }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Linux x86_64: \`${{ needs.calculate-checksums.outputs.linux_x86_64_sha256 }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Windows x86_64: \`${{ needs.calculate-checksums.outputs.windows_sha256 }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Package Configurations Updated" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.update-package-configs.result }}" = "success" ]; then
+            echo "- ✅ Homebrew formula updated" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Scoop manifest updated" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Chocolatey package updated" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Nix expression updated" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Linux packages generated" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Package configuration update failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Repository Updates" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.update-homebrew-tap.result }}" = "success" ]; then
+            echo "- ✅ Homebrew tap updated" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.update-homebrew-tap.result }}" = "skipped" ]; then
+            echo "- ⏭️ Homebrew tap skipped (not ayungavis repo)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Homebrew tap update failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.create-aur-pr.result }}" = "success" ]; then
+            echo "- ✅ AUR PKGBUILD artifact created" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ AUR PKGBUILD creation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. 🚀 Run the 'Submit to Package Repositories' workflow to publish to crates.io" >> $GITHUB_STEP_SUMMARY
+          echo "2. 📦 Download AUR artifact and submit to AUR manually" >> $GITHUB_STEP_SUMMARY
+          echo "3. 🔍 Run 'Test Package Installations' workflow to verify everything works" >> $GITHUB_STEP_SUMMARY
+          echo "4. 📋 Check package submission guide for manual submission steps" >> $GITHUB_STEP_SUMMARY

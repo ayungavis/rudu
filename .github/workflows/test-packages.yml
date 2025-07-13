@@ -1,0 +1,212 @@
+name: Test Package Installations
+
+on:
+  workflow_run:
+    workflows: ["Package Manager Updates"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to test (e.g., v0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  test-cargo:
+    name: Test Cargo Installation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install from crates.io
+        run: |
+          cargo install rudu
+          rudu --version
+          rudu --help
+
+  test-homebrew:
+    name: Test Homebrew Installation
+    runs-on: macos-latest
+    steps:
+      - name: Install from tap
+        run: |
+          # Add tap and install
+          brew tap ayungavis/tap || true
+          brew install rudu || brew upgrade rudu
+          rudu --version
+          rudu --help
+
+  test-linux-packages:
+    name: Test Linux Package Installations
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package_type: [deb, appimage]
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(git describe --tags --abbrev=0)
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Test DEB package
+        if: matrix.package_type == 'deb'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Build DEB package
+          chmod +x scripts/package.sh
+          ./scripts/package.sh deb
+          
+          # Install and test
+          sudo dpkg -i dist/rudu_*_amd64.deb || true
+          sudo apt-get install -f -y  # Fix dependencies if needed
+          rudu --version
+          rudu --help
+
+      - name: Test AppImage
+        if: matrix.package_type == 'appimage'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Build AppImage
+          chmod +x scripts/package.sh
+          ./scripts/package.sh appimage
+          
+          # Test AppImage
+          chmod +x dist/rudu-*-x86_64.AppImage
+          ./dist/rudu-*-x86_64.AppImage --version
+          ./dist/rudu-*-x86_64.AppImage --help
+
+  test-windows-packages:
+    name: Test Windows Package Installations
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        package_manager: [scoop, chocolatey]
+    steps:
+      - name: Test Scoop installation
+        if: matrix.package_manager == 'scoop'
+        shell: powershell
+        run: |
+          # Install Scoop if not present
+          if (!(Get-Command scoop -ErrorAction SilentlyContinue)) {
+            Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+            Invoke-RestMethod get.scoop.sh | Invoke-Expression
+          }
+          
+          # Add bucket and install (this will fail until the package is actually in scoop-extras)
+          # scoop bucket add extras
+          # scoop install rudu
+          
+          echo "Scoop test skipped - package not yet in official bucket"
+
+      - name: Test Chocolatey installation
+        if: matrix.package_manager == 'chocolatey'
+        shell: powershell
+        run: |
+          # Install Chocolatey if not present
+          if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          }
+          
+          # Install package (this will fail until the package is actually in chocolatey)
+          # choco install rudu -y
+          
+          echo "Chocolatey test skipped - package not yet in official repository"
+
+  test-nix:
+    name: Test Nix Installation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Nix
+        uses: cachix/install-nix-action@v24
+
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Test Nix build
+        run: |
+          # Test building from local expression
+          nix-build nix/rudu.nix
+          
+          # Test the built binary
+          ./result/bin/rudu --version
+          ./result/bin/rudu --help
+
+  test-arch-pkgbuild:
+    name: Test Arch PKGBUILD
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git rust
+
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Create non-root user for makepkg
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          chown -R builder:builder .
+
+      - name: Test PKGBUILD
+        run: |
+          # Generate PKGBUILD
+          chmod +x scripts/package.sh
+          ./scripts/package.sh arch
+          
+          # Test build as non-root user
+          cd dist/arch
+          sudo -u builder makepkg -si --noconfirm
+          
+          # Test the installed binary
+          rudu --version
+          rudu --help
+
+  integration-test:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: [test-cargo]
+    steps:
+      - name: Install rudu via cargo
+        run: cargo install rudu
+
+      - name: Create test directory structure
+        run: |
+          mkdir -p test_dir/{large,medium,small}
+          
+          # Create files of different sizes
+          dd if=/dev/zero of=test_dir/large/big_file.bin bs=1M count=10
+          dd if=/dev/zero of=test_dir/medium/med_file.bin bs=1K count=500
+          dd if=/dev/zero of=test_dir/small/small_file.bin bs=1 count=100
+
+      - name: Test rudu functionality
+        run: |
+          # Test basic functionality
+          rudu test_dir
+          
+          # Test with different options
+          rudu -n 5 test_dir
+          rudu --number 2 test_dir
+          
+          # Verify output contains expected directories
+          output=$(rudu test_dir)
+          echo "$output" | grep -q "large"
+          echo "$output" | grep -q "medium"
+          
+          echo "Integration test passed!"
+
+      - name: Cleanup
+        run: rm -rf test_dir

@@ -2,7 +2,7 @@ class Rudu < Formula
   desc "Fast, parallel Rust CLI tool for analyzing directory sizes"
   homepage "https://github.com/ayungavis/rudu"
   url "https://github.com/ayungavis/rudu/archive/v0.1.0.tar.gz"
-  sha256 "REPLACE_WITH_ACTUAL_SHA256"
+  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
   license "MIT"
   head "https://github.com/ayungavis/rudu.git", branch: "main"
 
@@ -14,7 +14,7 @@ class Rudu < Formula
 
   test do
     # Test that the binary runs and shows help
-    assert_match "Simple Rust CLI to report top-N largest directories", shell_output("#{bin}/rudu --help")
+    assert_match "Fast, parallel Rust CLI tool for analyzing directory sizes", shell_output("#{bin}/rudu --help")
     
     # Test basic functionality on a temporary directory
     system "mkdir", "-p", "test_dir/subdir"
