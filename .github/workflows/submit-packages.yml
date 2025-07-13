@@ -2,7 +2,7 @@ name: Submit to Package Repositories
 
 on:
   workflow_run:
-    workflows: ["Package Manager Updates"]
+    workflows: ["Package Manager Updates", "Test Package Installations"]
     types:
       - completed
   workflow_dispatch:
@@ -21,10 +21,57 @@ permissions:
   contents: read
 
 jobs:
+  check-prerequisites:
+    name: Check Prerequisites
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run'
+    outputs:
+      can_submit_homebrew: ${{ steps.check.outputs.can_submit_homebrew }}
+      can_submit_aur: ${{ steps.check.outputs.can_submit_aur }}
+      can_submit_crates: ${{ steps.check.outputs.can_submit_crates }}
+      triggering_workflow: ${{ steps.check.outputs.triggering_workflow }}
+    steps:
+      - name: Check workflow prerequisites
+        id: check
+        run: |
+          echo "Triggering workflow: ${{ github.event.workflow_run.name }}"
+          echo "Workflow conclusion: ${{ github.event.workflow_run.conclusion }}"
+
+          # Set triggering workflow
+          echo "triggering_workflow=${{ github.event.workflow_run.name }}" >> $GITHUB_OUTPUT
+
+          # Check if the triggering workflow was successful
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "Triggering workflow failed, skipping all submissions"
+            echo "can_submit_homebrew=false" >> $GITHUB_OUTPUT
+            echo "can_submit_aur=false" >> $GITHUB_OUTPUT
+            echo "can_submit_crates=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Default to allowing crates submission for any successful workflow
+          echo "can_submit_crates=true" >> $GITHUB_OUTPUT
+
+          # Check specific conditions based on triggering workflow
+          if [ "${{ github.event.workflow_run.name }}" = "Package Manager Updates" ]; then
+            # After package updates, allow crates but wait for tests for homebrew/aur
+            echo "can_submit_homebrew=false" >> $GITHUB_OUTPUT
+            echo "can_submit_aur=false" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.workflow_run.name }}" = "Test Package Installations" ]; then
+            # After tests pass, allow homebrew and aur submissions
+            echo "can_submit_homebrew=true" >> $GITHUB_OUTPUT
+            echo "can_submit_aur=true" >> $GITHUB_OUTPUT
+          else
+            # Unknown workflow, be conservative
+            echo "can_submit_homebrew=false" >> $GITHUB_OUTPUT
+            echo "can_submit_aur=false" >> $GITHUB_OUTPUT
+          fi
+
   submit-to-crates:
     name: Submit to crates.io
     runs-on: ubuntu-latest
-    if: contains(github.event.inputs.repositories, 'crates') || github.event.inputs.repositories == ''
+    needs: [check-prerequisites]
+    if: always() && (needs.check-prerequisites.outputs.can_submit_crates == 'true' || github.event_name == 'workflow_dispatch')
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -63,7 +110,8 @@ jobs:
   submit-to-homebrew-tap:
     name: Submit to Homebrew Tap
     runs-on: ubuntu-latest
-    if: contains(github.event.inputs.repositories, 'homebrew')
+    needs: [check-prerequisites]
+    if: always() && (needs.check-prerequisites.outputs.can_submit_homebrew == 'true' || contains(github.event.inputs.repositories, 'homebrew'))
     steps:
       - name: Checkout main repository
         uses: actions/checkout@v4
@@ -102,7 +150,8 @@ jobs:
   create-aur-submission:
     name: Create AUR Submission
     runs-on: ubuntu-latest
-    if: contains(github.event.inputs.repositories, 'aur')
+    needs: [check-prerequisites]
+    if: always() && (needs.check-prerequisites.outputs.can_submit_aur == 'true' || contains(github.event.inputs.repositories, 'aur'))
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -171,6 +220,8 @@ jobs:
   create-package-submission-guide:
     name: Create Package Submission Guide
     runs-on: ubuntu-latest
+    needs: [check-prerequisites]
+    if: always()
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -282,6 +333,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       [
+        check-prerequisites,
         submit-to-crates,
         submit-to-homebrew-tap,
         create-aur-submission,
@@ -293,6 +345,13 @@ jobs:
         run: |
           echo "## Package Submission Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Show triggering workflow info
+          if [ "${{ needs.check-prerequisites.outputs.triggering_workflow }}" != "" ]; then
+            echo "**Triggered by:** ${{ needs.check-prerequisites.outputs.triggering_workflow }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
           echo "### Automated Submissions" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ needs.submit-to-crates.result }}" = "success" ]; then
