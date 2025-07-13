@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to test (e.g., v0.1.0)'
+        description: "Version to test (e.g., v0.1.0)"
         required: true
         type: string
 
@@ -44,6 +44,8 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for git describe
 
       - name: Get version
         id: version
@@ -51,7 +53,8 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION=$(git describe --tags --abbrev=0)
+            # Get the latest tag, fallback to current version in Cargo.toml
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')")
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
@@ -59,11 +62,11 @@ jobs:
         if: matrix.package_type == 'deb'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
+
           # Build DEB package
           chmod +x scripts/package.sh
           ./scripts/package.sh deb
-          
+
           # Install and test
           sudo dpkg -i dist/rudu_*_amd64.deb || true
           sudo apt-get install -f -y  # Fix dependencies if needed
@@ -74,11 +77,11 @@ jobs:
         if: matrix.package_type == 'appimage'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
+
           # Build AppImage
           chmod +x scripts/package.sh
           ./scripts/package.sh appimage
-          
+
           # Test AppImage
           chmod +x dist/rudu-*-x86_64.AppImage
           ./dist/rudu-*-x86_64.AppImage --version
@@ -100,11 +103,11 @@ jobs:
             Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
             Invoke-RestMethod get.scoop.sh | Invoke-Expression
           }
-          
+
           # Add bucket and install (this will fail until the package is actually in scoop-extras)
           # scoop bucket add extras
           # scoop install rudu
-          
+
           echo "Scoop test skipped - package not yet in official bucket"
 
       - name: Test Chocolatey installation
@@ -117,10 +120,10 @@ jobs:
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
             Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
           }
-          
+
           # Install package (this will fail until the package is actually in chocolatey)
           # choco install rudu -y
-          
+
           echo "Chocolatey test skipped - package not yet in official repository"
 
   test-nix:
@@ -132,12 +135,14 @@ jobs:
 
       - name: Checkout sources
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for git describe
 
       - name: Test Nix build
         run: |
-          # Test building from local expression
-          nix-build nix/rudu.nix
-          
+          # Test building from local expression with nixpkgs
+          nix-build -E 'with import <nixpkgs> {}; callPackage ./nix/rudu.nix {}'
+
           # Test the built binary
           ./result/bin/rudu --version
           ./result/bin/rudu --help
@@ -154,6 +159,8 @@ jobs:
 
       - name: Checkout sources
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for git describe
 
       - name: Create non-root user for makepkg
         run: |
@@ -166,11 +173,15 @@ jobs:
           # Generate PKGBUILD
           chmod +x scripts/package.sh
           ./scripts/package.sh arch
-          
+
+          # Copy PKGBUILD to builder's home directory for proper permissions
+          sudo -u builder mkdir -p /home/builder/build
+          sudo -u builder cp dist/arch/PKGBUILD /home/builder/build/
+
           # Test build as non-root user
-          cd dist/arch
+          cd /home/builder/build
           sudo -u builder makepkg -si --noconfirm
-          
+
           # Test the installed binary
           rudu --version
           rudu --help
@@ -186,7 +197,7 @@ jobs:
       - name: Create test directory structure
         run: |
           mkdir -p test_dir/{large,medium,small}
-          
+
           # Create files of different sizes
           dd if=/dev/zero of=test_dir/large/big_file.bin bs=1M count=10
           dd if=/dev/zero of=test_dir/medium/med_file.bin bs=1K count=500
@@ -196,16 +207,16 @@ jobs:
         run: |
           # Test basic functionality
           rudu test_dir
-          
+
           # Test with different options
           rudu -n 5 test_dir
           rudu --number 2 test_dir
-          
+
           # Verify output contains expected directories
           output=$(rudu test_dir)
           echo "$output" | grep -q "large"
           echo "$output" | grep -q "medium"
-          
+
           echo "Integration test passed!"
 
       - name: Cleanup
