@@ -1,8 +1,8 @@
 class Rudu < Formula
   desc "Fast, parallel Rust CLI tool for analyzing directory sizes"
   homepage "https://github.com/ayungavis/rudu"
-  url "https://github.com/ayungavis/rudu/archive/v0.2.3.tar.gz"
-  sha256 "f349a8831cad7868b862e19e17f01f44cda35081115e0036459a4ee0bdeec534"
+  url "https://github.com/ayungavis/rudu/archive/v0.2.4.tar.gz"
+  sha256 "34f86737d527aaf77e3b3892de2690435e53bd84a80719e7fd43c039bfaed94b"
   license "MIT"
   head "https://github.com/ayungavis/rudu.git", branch: "main"
 
