@@ -183,8 +183,8 @@ jobs:
           cd dist
           ./appimagetool --appimage-extract
 
-          # Use the extracted appimagetool
-          ./squashfs-root/AppRun AppDir rudu-${VERSION}-x86_64.AppImage
+          # Use the extracted appimagetool with ARCH environment variable
+          ARCH=x86_64 ./squashfs-root/AppRun AppDir rudu-${VERSION}-x86_64.AppImage
           cd ..
 
       - name: Upload DEB package
