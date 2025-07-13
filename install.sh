@@ -59,6 +59,16 @@ detect_platform() {
                     ;;
             esac
             ;;
+        cygwin*|mingw*|msys*)
+            case $arch in
+                x86_64)
+                    echo "rudu-windows-x86_64"
+                    ;;
+                *)
+                    error "Unsupported architecture: $arch"
+                    ;;
+            esac
+            ;;
         *)
             error "Unsupported operating system: $os"
             ;;
@@ -78,30 +88,47 @@ get_latest_version() {
 install_binary() {
     local platform=$1
     local version=$2
-    local download_url="https://github.com/$REPO/releases/download/$version/$platform.tar.gz"
     local temp_dir=$(mktemp -d)
-    
+
     log "Downloading $BINARY_NAME $version for $platform..."
-    
+
+    # Determine file extension and download URL
+    if [[ $platform == *"windows"* ]]; then
+        local archive_name="$platform.zip"
+        local download_url="https://github.com/$REPO/releases/download/$version/$archive_name"
+    else
+        local archive_name="$platform.tar.gz"
+        local download_url="https://github.com/$REPO/releases/download/$version/$archive_name"
+    fi
+
     # Download the archive
-    if ! curl -L -o "$temp_dir/$platform.tar.gz" "$download_url"; then
+    if ! curl -L -o "$temp_dir/$archive_name" "$download_url"; then
         error "Failed to download $download_url"
     fi
-    
+
     # Extract the binary
     log "Extracting binary..."
-    if ! tar -xzf "$temp_dir/$platform.tar.gz" -C "$temp_dir"; then
-        error "Failed to extract archive"
+    if [[ $platform == *"windows"* ]]; then
+        if ! unzip -q "$temp_dir/$archive_name" -d "$temp_dir"; then
+            error "Failed to extract archive"
+        fi
+        # Windows binary has .exe extension
+        local binary_name="$BINARY_NAME.exe"
+    else
+        if ! tar -xzf "$temp_dir/$archive_name" -C "$temp_dir"; then
+            error "Failed to extract archive"
+        fi
+        local binary_name="$BINARY_NAME"
     fi
     
     # Install the binary
     log "Installing to $INSTALL_DIR..."
     if [ ! -w "$INSTALL_DIR" ]; then
         log "Need sudo privileges to install to $INSTALL_DIR"
-        sudo mv "$temp_dir/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+        sudo mv "$temp_dir/$binary_name" "$INSTALL_DIR/$BINARY_NAME"
         sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
     else
-        mv "$temp_dir/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+        mv "$temp_dir/$binary_name" "$INSTALL_DIR/$BINARY_NAME"
         chmod +x "$INSTALL_DIR/$BINARY_NAME"
     fi
     
@@ -120,19 +147,26 @@ main() {
     if ! command -v curl >/dev/null 2>&1; then
         error "curl is required but not installed"
     fi
-    
-    if ! command -v tar >/dev/null 2>&1; then
-        error "tar is required but not installed"
-    fi
-    
+
     # Detect platform
     local platform=$(detect_platform)
     log "Detected platform: $platform"
-    
+
+    # Check appropriate extraction tool based on platform
+    if [[ $platform == *"windows"* ]]; then
+        if ! command -v unzip >/dev/null 2>&1; then
+            error "unzip is required but not installed"
+        fi
+    else
+        if ! command -v tar >/dev/null 2>&1; then
+            error "tar is required but not installed"
+        fi
+    fi
+
     # Get latest version
     local version=$(get_latest_version)
     log "Latest version: $version"
-    
+
     # Install binary
     install_binary "$platform" "$version"
     

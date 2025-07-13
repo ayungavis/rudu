@@ -1,10 +1,9 @@
 name: Release
 
-# on:
-#   push:
-#     tags:
-#       - "v*"
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -49,7 +48,7 @@ jobs:
             name: rudu-linux-x86_64-musl
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            name: rudu-windows-x86_64.exe
+            name: rudu-windows-x86_64
           - os: macos-latest
             target: x86_64-apple-darwin
             name: rudu-macos-x86_64
