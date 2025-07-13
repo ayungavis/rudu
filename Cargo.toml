@@ -1,0 +1,29 @@
+[package]
+name = "rudu"
+version = "0.1.0"
+edition = "2021"
+authors = ["Wahyu Kurniawan <wahyu@tranity.id>"]
+description = "Fast, parallel Rust CLI tool for analyzing directory sizes"
+license = "MIT"
+repository = "https://github.com/ayungavis/rudu"
+homepage = "https://github.com/ayungavis/rudu"
+documentation = "https://docs.rs/rudu"
+readme = "README.md"
+keywords = ["cli", "directory", "disk", "usage", "filesystem"]
+categories = ["command-line-utilities", "filesystem"]
+exclude = [
+    "dist/*",
+    ".github/*",
+    "scripts/*",
+    "homebrew/*",
+    "install.sh",
+    "deny.toml",
+    "Makefile"
+]
+
+[dependencies]
+clap = { version = "4.5.41", features = ["derive"] }
+walkdir = "2"
+humansize = "2.1.3"
+rayon = "1.10"
+tempfile = "3.20.0"
