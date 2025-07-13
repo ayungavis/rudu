@@ -1,9 +1,9 @@
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = '0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5'
 
-$packageName = 'rudu'
-$url64 = 'https://github.com/ayungavis/rudu/releases/download/v0.1.0/rudu-windows-x86_64.zip'
-$checksum64 = '0000000000000000000000000000000000000000000000000000000000000000'
-$checksumType64 = 'sha256'
+$packageName = '0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5'
+$url64 = '0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5'
+$checksum64 = '0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5'
+$checksumType64 = '0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5'
 
 $packageArgs = @{
   packageName    = $packageName
