@@ -17,6 +17,12 @@ A fast, parallel Rust CLI tool for analyzing directory sizes and finding the lar
 - 🛡️ **Safe symlink handling** - doesn't follow symbolic links to prevent infinite loops
 - 📁 **Flexible path input** - analyze any directory, defaults to root (`/`)
 - 🔧 **Simple CLI interface** with sensible defaults
+- 📈 **Two-phase progress** - counting files and processing with visual progress bars
+- 🎨 **Clean output** - shows relative paths without base directory prefix
+- 🔗 **Hardlink detection** - avoids double-counting hardlinked files
+- 🌈 **Colorful output** - beautiful colors and emojis for enhanced visual experience
+- ⚡ **Smart caching** - cache scan results for lightning-fast subsequent runs
+- 🗂️ **Cache management** - built-in cache statistics and cleanup tools
 
 ## Installation
 
@@ -158,32 +164,126 @@ rudu -n 20 /var/log
 
 # Show top 5 largest directories with long flag
 rudu --number 5 /usr/local
+
+# Disable progress bar for scripting
+rudu --quiet /home/user
+
+# Short form of quiet mode
+rudu -q /var/log
+
+# Enable caching for faster subsequent scans
+rudu --cache /home/user
+
+# Use cache with custom max age (in hours)
+rudu --cache --cache-age 12 /var/log
+
+# Show cache statistics
+rudu --cache-stats
+
+# Clear all cached data
+rudu --clear-cache
 ```
 
 ### Example Output
 
 ```
-Scanning directory: /home/user/Documents
- 1.    1.2 GB  /home/user/Documents/Videos
- 2.  456.7 MB  /home/user/Documents/Photos
- 3.  123.4 MB  /home/user/Documents/Projects/rust-project
- 4.   89.2 MB  /home/user/Documents/Downloads
- 5.   45.6 MB  /home/user/Documents/Books
+🔍 Scanning directory: /home/user/Documents
+⠂ Counting files... 2847 found
+⠒ Processing [00:00:02] [########################################] 2847/2847 files (0s)
+💾 Cached results for /home/user/Documents
+🔥  1.    1.2 GB  Videos
+📦  2.  456.7 MB  Photos
+📁  3.  123.4 MB  Projects/rust-project
+📁  4.   89.2 MB  Downloads
+📄  5.   45.6 MB  Books
+
+📊 Summary of /home/user/Documents
+💾 Total file size: 2.4 GB
+📋 Total files: 2847
 ```
+
+_Note: The actual output includes beautiful colors and emojis that enhance the visual experience!_
 
 ### Command Line Options
 
 - `path` - Root directory to analyze (default: `/`)
 - `-n, --number <NUMBER>` - Number of top results to show (default: 10)
+- `-q, --quiet` - Disable progress bar for scripting
+- `-c, --cache` - Enable caching for faster subsequent scans
+- `--cache-age <HOURS>` - Maximum cache age in hours (default: 24)
+- `--cache-stats` - Show cache statistics
+- `--clear-cache` - Clear all cached data
 - `-h, --help` - Show help information
 - `-V, --version` - Show version information
 
 ## How It Works
 
 1. **Recursive Traversal**: Uses `walkdir` to recursively walk through all files in the directory tree
-2. **Size Aggregation**: For each file, adds its size to all ancestor directories up to the root
-3. **Parallel Sorting**: Uses Rayon to sort results in parallel for better performance
-4. **Human-Readable Output**: Formats byte sizes using decimal units (KB, MB, GB, etc.)
+2. **Progress Tracking**: Shows real-time progress with file count and estimated completion time
+3. **Hardlink Detection**: Identifies and avoids double-counting hardlinked files using inode tracking
+4. **Size Aggregation**: For each file, adds its size to all ancestor directories up to the root
+5. **Parallel Sorting**: Uses Rayon to sort results in parallel for better performance
+6. **Clean Output**: Displays relative paths without the base directory prefix
+7. **Human-Readable Output**: Formats byte sizes using decimal units (KB, MB, GB, etc.)
+
+## File Size Accuracy
+
+The tool now includes hardlink detection to provide more accurate file size calculations:
+
+- **Hardlink Detection**: On Unix systems, files with multiple hardlinks are only counted once
+- **Inode Tracking**: Uses device and inode numbers to identify duplicate files
+- **Accurate Totals**: Prevents inflated directory sizes caused by hardlinked files
+
+This is particularly important on macOS and Linux systems where system files often use hardlinks.
+
+## Caching System
+
+Rudu includes a smart caching system that dramatically speeds up subsequent scans:
+
+### How Caching Works
+
+- **Automatic Storage**: When using `--cache`, scan results are automatically stored in your system's cache directory
+- **Smart Retrieval**: Subsequent scans of the same directory use cached data if it's still valid
+- **Parent Cache Utilization**: Scanning subdirectories can use parent directory cache data for instant results
+- **Configurable Expiry**: Cache entries expire after a configurable time (default: 24 hours)
+
+### Cache Benefits
+
+- **Lightning Fast**: Cached scans complete in milliseconds instead of seconds/minutes
+- **Subdirectory Optimization**: Scanning `/home/user/Documents` after caching `/home/user` is nearly instant
+- **Intelligent**: Only uses cache when data is fresh and relevant
+
+### Cache Management
+
+```bash
+# Enable caching for a scan
+rudu --cache /large/directory
+
+# Set custom cache expiry (12 hours)
+rudu --cache --cache-age 12 /path/to/scan
+
+# View cache statistics
+rudu --cache-stats
+
+# Clear all cached data
+rudu --clear-cache
+```
+
+### Cache Location
+
+- **Linux**: `~/.cache/rudu/`
+- **macOS**: `~/Library/Caches/rudu/`
+- **Windows**: `%LOCALAPPDATA%\rudu\cache\`
+
+## Performance
+
+Rudu provides different performance characteristics compared to the standard `du` command:
+
+- **First scan**: Slower than `du` due to additional features (hardlink detection, progress tracking, cache preparation)
+- **Cached scans**: **200x+ faster** than `du` for subsequent runs
+- **Best use case**: Repeated analysis of the same directories
+
+For detailed benchmark results comparing rudu with `du`, see [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## Development
 
@@ -226,6 +326,7 @@ cargo test test_nested_dirs
 
 - `src/main.rs` - CLI interface and main application logic
 - `src/lib.rs` - Core directory size computation algorithm
+- `src/cache.rs` - Caching system implementation
 - `Cargo.toml` - Project configuration and dependencies
 
 ### Dependencies
@@ -235,6 +336,11 @@ cargo test test_nested_dirs
 - **humansize** - Human-readable file size formatting
 - **rayon** - Data parallelism for sorting
 - **tempfile** - Temporary file handling for tests
+- **indicatif** - Progress bars and spinners for terminal applications
+- **colored** - Terminal color and styling support
+- **serde** - Serialization framework for cache data
+- **serde_json** - JSON serialization for cache storage
+- **dirs** - Cross-platform system directory detection
 
 ## Contributing
 
@@ -353,12 +459,23 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Roadmap
 
+### Completed ✅
+
+- [x] Add progress bar for large directory scans
+- [x] Colorful output with emojis
+- [x] Smart caching system
+- [x] Cache management tools
+
+### Planned 🚧
+
 - [ ] Add JSON/CSV output formats
 - [ ] Implement directory exclusion patterns
-- [ ] Add progress bar for large directory scans
 - [ ] Support for following symbolic links (optional)
 - [ ] Configuration file support
 - [ ] Windows-specific optimizations
+- [ ] Interactive mode with real-time filtering
+- [ ] Integration with cloud storage providers
+- [ ] Plugin system for custom analyzers
 
 ---
 
