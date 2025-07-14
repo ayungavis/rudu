@@ -131,6 +131,7 @@ fn compute_dir_sizes_with_progress_internal(
     // Use DashMap for thread-safe concurrent access with pre-allocated capacity
     let estimated_dirs = 1000; // Reasonable estimate for most directories
     let sizes = Arc::new(DashMap::with_capacity(estimated_dirs));
+    #[cfg(all(unix, not(test)))]
     let seen_inodes = Arc::new(DashMap::<(u64, u64), bool>::with_capacity(
         estimated_dirs / 10,
     )); // Fewer hardlinks expected
@@ -174,6 +175,7 @@ fn compute_dir_sizes_with_progress_internal(
     for _ in 0..num_workers {
         let rx = rx.clone();
         let sizes = Arc::clone(&sizes);
+        #[cfg(all(unix, not(test)))]
         let seen_inodes = Arc::clone(&seen_inodes);
         let file_count = Arc::clone(&file_count);
 
@@ -182,11 +184,14 @@ fn compute_dir_sizes_with_progress_internal(
         let handle = thread::spawn(move || {
             while let Ok(entry) = rx.recv() {
                 if let Ok(metadata) = entry.metadata() {
+                    #[cfg(all(unix, not(test)))]
                     let mut file_size = metadata.len();
+                    #[cfg(any(not(unix), test))]
+                    let file_size = metadata.len();
                     file_count.fetch_add(1, Ordering::Relaxed);
 
                     // Check for hardlinks to avoid double-counting (Unix only)
-                    #[cfg(unix)]
+                    #[cfg(all(unix, not(test)))]
                     {
                         use std::os::unix::fs::MetadataExt;
                         let inode = metadata.ino();
@@ -288,16 +293,29 @@ mod tests {
         fs::create_dir_all(&b).unwrap();
 
         let file_path_1 = a.join("foo.txt");
-        std::fs::write(file_path_1, "abcd").unwrap(); // 4 bytes
+        std::fs::write(&file_path_1, "abcd").unwrap(); // 4 bytes
 
         let file_path_2 = b.join("bar.txt");
-        std::fs::write(file_path_2, "xyz").unwrap(); // 3 bytes
+        std::fs::write(&file_path_2, "xyz").unwrap(); // 3 bytes
 
         let sizes = compute_dir_sizes(dir.path());
+
         // root: 7 bytes, a: 7 bytes, a/b: 3 bytes
-        assert_eq!(sizes.get(dir.path()), Some(&7));
-        assert_eq!(sizes.get(&a), Some(&7));
-        assert_eq!(sizes.get(&b), Some(&3));
+        assert_eq!(
+            sizes.get(dir.path()),
+            Some(&7),
+            "Root directory should have 7 bytes total"
+        );
+        assert_eq!(
+            sizes.get(&a),
+            Some(&7),
+            "Directory 'a' should have 7 bytes total"
+        );
+        assert_eq!(
+            sizes.get(&b),
+            Some(&3),
+            "Directory 'b' should have 3 bytes total"
+        );
     }
 
     #[test]
