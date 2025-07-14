@@ -131,7 +131,9 @@ fn compute_dir_sizes_with_progress_internal(
     // Use DashMap for thread-safe concurrent access with pre-allocated capacity
     let estimated_dirs = 1000; // Reasonable estimate for most directories
     let sizes = Arc::new(DashMap::with_capacity(estimated_dirs));
-    let seen_inodes = Arc::new(DashMap::with_capacity(estimated_dirs / 10)); // Fewer hardlinks expected
+    let seen_inodes = Arc::new(DashMap::<(u64, u64), bool>::with_capacity(
+        estimated_dirs / 10,
+    )); // Fewer hardlinks expected
     let file_count = Arc::new(AtomicUsize::new(0));
 
     // Create a channel for streaming file processing
@@ -192,11 +194,9 @@ fn compute_dir_sizes_with_progress_internal(
                         let key = (device, inode);
 
                         // If this inode has multiple links, only count it once
-                        if metadata.nlink() > 1 {
-                            if seen_inodes.insert(key, true).is_some() {
-                                // Skip this file, we've already counted it
-                                file_size = 0;
-                            }
+                        if metadata.nlink() > 1 && seen_inodes.insert(key, true).is_some() {
+                            // Skip this file, we've already counted it
+                            file_size = 0;
                         }
                     }
 

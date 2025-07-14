@@ -236,6 +236,6 @@ fn main() {
     println!(
         "⏱️  {}: {}",
         "Time taken".bright_cyan(),
-        format!("{:.2?}", duration).bright_yellow().bold()
+        format!("{duration:.2?}").bright_yellow().bold()
     );
 }
