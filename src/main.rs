@@ -19,7 +19,7 @@ struct Cli {
     #[arg(short = 'n', long = "number", default_value_t = 10)]
     top: usize,
 
-    /// Disable progress bar
+    /// Suppress informational messages
     #[arg(short = 'q', long = "quiet")]
     quiet: bool,
 
@@ -46,19 +46,20 @@ fn main() {
     // Handle cache operations first
     if cli.clear_cache {
         match Cache::new() {
-            Ok(cache) => {
-                match cache.clear() {
-                    Ok(()) => {
-                        println!("🗑️  {} {}", "Cache cleared successfully!".bright_green().bold(),
-                                format!("({})", cache.cache_directory().display()).bright_blue());
-                        return;
-                    }
-                    Err(e) => {
-                        eprintln!("❌ {}: {}", "Failed to clear cache".bright_red().bold(), e);
-                        process::exit(1);
-                    }
+            Ok(cache) => match cache.clear() {
+                Ok(()) => {
+                    println!(
+                        "🗑️  {} {}",
+                        "Cache cleared successfully!".bright_green().bold(),
+                        format!("({})", cache.cache_directory().display()).bright_blue()
+                    );
+                    return;
                 }
-            }
+                Err(e) => {
+                    eprintln!("❌ {}: {}", "Failed to clear cache".bright_red().bold(), e);
+                    process::exit(1);
+                }
+            },
             Err(e) => {
                 eprintln!("❌ {}: {}", "Failed to access cache".bright_red().bold(), e);
                 process::exit(1);
@@ -68,22 +69,34 @@ fn main() {
 
     if cli.cache_stats {
         match Cache::new() {
-            Ok(cache) => {
-                match cache.stats() {
-                    Ok((count, size)) => {
-                        println!("📊 {} {}", "Cache Statistics".bright_green().bold(),
-                                format!("({})", cache.cache_directory().display()).bright_blue());
-                        println!("📁 {}: {}", "Cache entries".bright_cyan(), count.to_string().bright_yellow().bold());
-                        println!("💾 {}: {}", "Cache size".bright_cyan(),
-                                format_size(size, DECIMAL).bright_yellow().bold());
-                        return;
-                    }
-                    Err(e) => {
-                        eprintln!("❌ {}: {}", "Failed to get cache stats".bright_red().bold(), e);
-                        process::exit(1);
-                    }
+            Ok(cache) => match cache.stats() {
+                Ok((count, size)) => {
+                    println!(
+                        "📊 {} {}",
+                        "Cache Statistics".bright_green().bold(),
+                        format!("({})", cache.cache_directory().display()).bright_blue()
+                    );
+                    println!(
+                        "📁 {}: {}",
+                        "Cache entries".bright_cyan(),
+                        count.to_string().bright_yellow().bold()
+                    );
+                    println!(
+                        "💾 {}: {}",
+                        "Cache size".bright_cyan(),
+                        format_size(size, DECIMAL).bright_yellow().bold()
+                    );
+                    return;
                 }
-            }
+                Err(e) => {
+                    eprintln!(
+                        "❌ {}: {}",
+                        "Failed to get cache stats".bright_red().bold(),
+                        e
+                    );
+                    process::exit(1);
+                }
+            },
             Err(e) => {
                 eprintln!("❌ {}: {}", "Failed to access cache".bright_red().bold(), e);
                 process::exit(1);
@@ -104,15 +117,24 @@ fn main() {
         }
     };
 
-    eprintln!("🔍 {} {}", "Scanning directory:".bright_cyan().bold(), base.display().to_string().bright_white());
+    eprintln!(
+        "🔍 {} {}",
+        "Scanning directory:".bright_cyan().bold(),
+        base.display().to_string().bright_white()
+    );
 
-    let (sizes, total_files) = compute_dir_sizes_with_cache(&base, cli.quiet, cli.cache, cli.cache_age);
+    let (sizes, total_files, duration) =
+        compute_dir_sizes_with_cache(&base, cli.quiet, cli.cache, cli.cache_age);
 
     let mut entries: Vec<(PathBuf, u64)> = sizes.into_iter().collect();
     entries.par_sort_unstable_by(|a, b| b.1.cmp(&a.1));
 
     // Get the base directory size for summary
-    let base_size = entries.iter().find(|(path, _)| path == &base).map(|(_, size)| *size).unwrap_or(0);
+    let base_size = entries
+        .iter()
+        .find(|(path, _)| path == &base)
+        .map(|(_, size)| *size)
+        .unwrap_or(0);
 
     let mut display_count = 0;
     for (path, bytes) in entries.into_iter() {
@@ -145,10 +167,21 @@ fn main() {
         display_count += 1;
 
         // Add emoji based on size
-        let emoji = if bytes >= 1_000_000_000 { "🔥" } // >= 1GB
-        else if bytes >= 100_000_000 { "📦" } // >= 100MB
-        else if bytes >= 10_000_000 { "📁" } // >= 10MB
-        else { "📄" }; // < 10MB
+        let emoji = if bytes >= 1_000_000_000 {
+            "🔥"
+        }
+        // >= 1GB
+        else if bytes >= 100_000_000 {
+            "📦"
+        }
+        // >= 100MB
+        else if bytes >= 10_000_000 {
+            "📁"
+        }
+        // >= 10MB
+        else {
+            "📄"
+        }; // < 10MB
 
         // Color the rank number based on position
         let rank_color = match display_count {
@@ -159,25 +192,50 @@ fn main() {
         };
 
         // Color the size based on magnitude
-        let size_color = if bytes >= 1_000_000_000 { human.bright_red().bold() } // >= 1GB
-        else if bytes >= 100_000_000 { human.bright_yellow().bold() } // >= 100MB
-        else if bytes >= 10_000_000 { human.bright_green().bold() } // >= 10MB
-        else { human.bright_blue() }; // < 10MB
+        let size_color = if bytes >= 1_000_000_000 {
+            human.bright_red().bold()
+        }
+        // >= 1GB
+        else if bytes >= 100_000_000 {
+            human.bright_yellow().bold()
+        }
+        // >= 100MB
+        else if bytes >= 10_000_000 {
+            human.bright_green().bold()
+        }
+        // >= 10MB
+        else {
+            human.bright_blue()
+        }; // < 10MB
 
-        println!("{} {} {:>10}  {}",
-                 emoji,
-                 rank_color,
-                 size_color,
-                 display_path.bright_white());
+        println!(
+            "{} {} {:>10}  {}",
+            emoji,
+            rank_color,
+            size_color,
+            display_path.bright_white()
+        );
     }
 
     // Print summary
-    println!();
-    println!("📊 {} {}", "Summary of".bright_green().bold(), base.display().to_string().bright_white().bold());
-    println!("💾 {}: {}",
-             "Total file size".bright_cyan(),
-             format_size(base_size, DECIMAL).bright_yellow().bold());
-    println!("📋 {}: {}",
-             "Total files".bright_cyan(),
-             total_files.to_string().bright_yellow().bold());
+    println!(
+        "📊 {} {}",
+        "Summary of".bright_green().bold(),
+        base.display().to_string().bright_white().bold()
+    );
+    println!(
+        "💾 {}: {}",
+        "Total file size".bright_cyan(),
+        format_size(base_size, DECIMAL).bright_yellow().bold()
+    );
+    println!(
+        "📋 {}: {}",
+        "Total files".bright_cyan(),
+        total_files.to_string().bright_yellow().bold()
+    );
+    println!(
+        "⏱️  {}: {}",
+        "Time taken".bright_cyan(),
+        format!("{:.2?}", duration).bright_yellow().bold()
+    );
 }

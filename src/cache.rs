@@ -45,17 +45,18 @@ impl Cache {
 
     /// Generate a cache key for a given path
     fn cache_key(&self, path: &Path) -> String {
-        use std::collections::hash_map::DefaultHasher;
+        use ahash::AHasher;
         use std::hash::{Hash, Hasher};
-        
-        let mut hasher = DefaultHasher::new();
+
+        let mut hasher = AHasher::default();
         path.hash(&mut hasher);
         format!("{:x}", hasher.finish())
     }
 
     /// Get cache file path for a given directory
     fn cache_file_path(&self, path: &Path) -> PathBuf {
-        self.cache_dir.join(format!("{}.json", self.cache_key(path)))
+        self.cache_dir
+            .join(format!("{}.json", self.cache_key(path)))
     }
 
     /// Check if cache entry is valid (not too old)
@@ -64,7 +65,7 @@ impl Cache {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         current_time - entry.timestamp <= max_age_seconds
     }
 
@@ -101,7 +102,7 @@ impl Cache {
         max_age_seconds: u64,
     ) -> Result<Option<CacheEntry>, Box<dyn std::error::Error>> {
         let cache_file = self.cache_file_path(path);
-        
+
         if !cache_file.exists() {
             return Ok(None);
         }
@@ -136,7 +137,7 @@ impl Cache {
         for (path, size) in &parent_cache.sizes {
             if path.starts_with(subdir) {
                 filtered_sizes.insert(path.clone(), *size);
-                
+
                 // Count files in this directory (approximate)
                 if path == subdir {
                     // This is a rough estimate - in a real implementation,

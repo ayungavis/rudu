@@ -17,6 +17,21 @@ Show version information and exit
 .TP
 .B \-n, \-\-number \fINUMBER\fR
 Number of top results to show (default: 10)
+.TP
+.B \-q, \-\-quiet
+Suppress informational messages for scripting
+.TP
+.B \-c, \-\-cache
+Enable caching for faster subsequent scans
+.TP
+.B \-\-cache\-age \fIHOURS\fR
+Maximum cache age in hours (default: 24)
+.TP
+.B \-\-cache\-stats
+Show cache statistics
+.TP
+.B \-\-clear\-cache
+Clear all cached data
 .SH ARGUMENTS
 .TP
 .B PATH
@@ -37,13 +52,22 @@ Show top 20 largest directories in /var/log
 .TP
 .B rudu \-\-number 5 /usr/local
 Show top 5 largest directories with long flag
+.TP
+.B rudu \-q /var/log
+Analyze /var/log with quiet mode (suppress informational messages)
 .SH OUTPUT FORMAT
-The output shows a numbered list of directories with their sizes in human-readable format (KB, MB, GB, etc.) and their full paths:
+The output shows a numbered list of directories with their sizes in human-readable format (KB, MB, GB, etc.) and their relative paths, followed by a summary with timing information:
 .PP
 .nf
- 1.    1.2 GB  /home/user/Documents/Videos
- 2.  456.7 MB  /home/user/Documents/Photos
- 3.  123.4 MB  /home/user/Documents/Projects
+🔍 Scanning directory: /home/user/Documents
+🔥  1.    1.2 GB  Videos
+📦  2.  456.7 MB  Photos
+📁  3.  123.4 MB  Projects
+
+📊 Summary of /home/user/Documents
+💾 Total file size: 2.4 GB
+📋 Total files: 2847
+⏱️  Time taken: 125.43ms
 .fi
 .SH PERFORMANCE
 .B rudu

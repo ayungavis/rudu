@@ -1,7 +1,13 @@
 use colored::*;
-use indicatif::{ProgressBar, ProgressStyle};
+use crossbeam_channel::bounded;
+use dashmap::DashMap;
+pub use rayon::prelude::*; // Re-export for main.rs
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
 use walkdir::{DirEntry, WalkDir};
 
 pub mod cache;
@@ -35,7 +41,7 @@ pub fn is_file(entry: &DirEntry) -> bool {
 /// println!("Size of /tmp/mydir: {} bytes", sizes[Path::new("/tmp/mydir")]);
 /// ```
 pub fn compute_dir_sizes(base: &Path) -> HashMap<PathBuf, u64> {
-    let (sizes, _) = compute_dir_sizes_with_progress(base, true);
+    let (sizes, _, _) = compute_dir_sizes_with_progress(base, true);
     sizes
 }
 
@@ -45,31 +51,46 @@ pub fn compute_dir_sizes_with_cache(
     quiet: bool,
     use_cache: bool,
     max_cache_age_hours: u64,
-) -> (HashMap<PathBuf, u64>, usize) {
+) -> (HashMap<PathBuf, u64>, usize, Duration) {
     if use_cache {
         if let Ok(cache) = Cache::new() {
             // Try to retrieve from cache first
             if let Ok(Some(cached_entry)) = cache.retrieve(base, max_cache_age_hours * 3600) {
                 if !quiet {
-                    eprintln!("🚀 {} {}", "Using cached results for".bright_green().bold(), base.display().to_string().bright_white());
+                    eprintln!(
+                        "🚀 {} {}",
+                        "Using cached results for".bright_green().bold(),
+                        base.display().to_string().bright_white()
+                    );
                 }
-                return (cached_entry.sizes, cached_entry.total_files);
+                return (
+                    cached_entry.sizes,
+                    cached_entry.total_files,
+                    Duration::from_secs(0),
+                );
             }
 
             // Check if we can use a parent directory's cache for this subdirectory
             if let Some(parent) = base.parent() {
                 if let Ok(Some(parent_cache)) = cache.retrieve(parent, max_cache_age_hours * 3600) {
-                    if let Some((filtered_sizes, file_count)) = cache.can_use_for_subdir(&parent_cache, base) {
+                    if let Some((filtered_sizes, file_count)) =
+                        cache.can_use_for_subdir(&parent_cache, base)
+                    {
                         if !quiet {
-                            eprintln!("🚀 {} {}", "Using parent cache for".bright_green().bold(), base.display().to_string().bright_white());
+                            eprintln!(
+                                "🚀 {} {}",
+                                "Using parent cache for".bright_green().bold(),
+                                base.display().to_string().bright_white()
+                            );
                         }
-                        return (filtered_sizes, file_count);
+                        return (filtered_sizes, file_count, Duration::from_secs(0));
                     }
                 }
             }
 
             // No cache hit, compute normally and store in cache
-            let (sizes, total_files) = compute_dir_sizes_with_progress_internal(base, quiet);
+            let (sizes, total_files, duration) =
+                compute_dir_sizes_with_progress_internal(base, quiet);
 
             // Store in cache
             if let Err(e) = cache.store(base, &sizes, total_files) {
@@ -77,10 +98,14 @@ pub fn compute_dir_sizes_with_cache(
                     eprintln!("⚠️  Warning: Failed to store cache: {e}");
                 }
             } else if !quiet {
-                eprintln!("💾 {} {}", "Cached results for".bright_blue(), base.display().to_string().bright_white());
+                eprintln!(
+                    "💾 {} {}",
+                    "Cached results for".bright_blue(),
+                    base.display().to_string().bright_white()
+                );
             }
 
-            (sizes, total_files)
+            (sizes, total_files, duration)
         } else {
             // Cache creation failed, fall back to normal computation
             compute_dir_sizes_with_progress_internal(base, quiet)
@@ -90,120 +115,144 @@ pub fn compute_dir_sizes_with_cache(
     }
 }
 
-pub fn compute_dir_sizes_with_progress(base: &Path, quiet: bool) -> (HashMap<PathBuf, u64>, usize) {
+pub fn compute_dir_sizes_with_progress(
+    base: &Path,
+    quiet: bool,
+) -> (HashMap<PathBuf, u64>, usize, Duration) {
     compute_dir_sizes_with_progress_internal(base, quiet)
 }
 
-fn compute_dir_sizes_with_progress_internal(base: &Path, quiet: bool) -> (HashMap<PathBuf, u64>, usize) {
-    let mut sizes: HashMap<PathBuf, u64> = HashMap::new();
-    let mut seen_inodes = HashMap::new(); // Track inodes to avoid double-counting hardlinks
+fn compute_dir_sizes_with_progress_internal(
+    base: &Path,
+    _quiet: bool,
+) -> (HashMap<PathBuf, u64>, usize, Duration) {
+    let start_time = Instant::now();
 
-    // Setup counting progress indicator (only if not quiet)
-    let counting_pb = if !quiet {
-        let pb = ProgressBar::new_spinner();
-        pb.set_style(
-            ProgressStyle::default_spinner()
-                .template("{spinner:.green} Counting files... {pos} found")
-                .unwrap()
-                .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
-        );
-        pb.enable_steady_tick(std::time::Duration::from_millis(100));
-        Some(pb)
-    } else {
-        None
-    };
+    // Use DashMap for thread-safe concurrent access with pre-allocated capacity
+    let estimated_dirs = 1000; // Reasonable estimate for most directories
+    let sizes = Arc::new(DashMap::with_capacity(estimated_dirs));
+    let seen_inodes = Arc::new(DashMap::with_capacity(estimated_dirs / 10)); // Fewer hardlinks expected
+    let file_count = Arc::new(AtomicUsize::new(0));
 
-    // Collect all files with counting progress
-    let mut files = Vec::new();
-    for entry in WalkDir::new(base)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(is_file)
-    {
-        files.push(entry);
-        if let Some(ref pb) = counting_pb {
-            pb.set_position(files.len() as u64);
-        }
-    }
+    // Create a channel for streaming file processing
+    // Use a larger buffer for better throughput on fast storage
+    let (tx, rx) = bounded(num_cpus::get() * 500); // Buffer based on CPU count
+    let base_path = base.to_path_buf();
 
-    // Finish counting progress
-    if let Some(pb) = counting_pb {
-        pb.finish_with_message(format!("Found {} files", files.len()));
-    }
+    // Spawn a thread to walk the directory and send files to the channel
+    let walker_thread = {
+        let tx = tx.clone();
+        let base_path = base_path.clone();
 
-    if files.is_empty() {
-        // Ensure the base directory is present even if empty
-        sizes.entry(base.to_path_buf()).or_insert(0);
-        return (sizes, 0);
-    }
-
-    // Setup processing progress bar (only if not quiet)
-    let processing_pb = if !quiet {
-        let pb = ProgressBar::new(files.len() as u64);
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner:.green} Processing [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
-                .unwrap()
-                .progress_chars("#>-"),
-        );
-        Some(pb)
-    } else {
-        None
-    };
-
-    // Process files with progress
-    for (i, entry) in files.iter().enumerate() {
-        if let Ok(metadata) = entry.metadata() {
-            let mut file_size = metadata.len();
-
-            // Check for hardlinks to avoid double-counting (Unix only)
-            #[cfg(unix)]
+        thread::spawn(move || {
+            let mut count = 0;
+            for entry in WalkDir::new(&base_path)
+                .follow_links(false)
+                .into_iter()
+                .filter_map(Result::ok)
+                .filter(is_file)
             {
-                use std::os::unix::fs::MetadataExt;
-                let inode = metadata.ino();
-                let device = metadata.dev();
-                let key = (device, inode);
+                count += 1;
 
-                // If this inode has multiple links, only count it once
-                if metadata.nlink() > 1 {
-                    if let std::collections::hash_map::Entry::Vacant(e) = seen_inodes.entry(key) {
-                        e.insert(true);
-                    } else {
-                        // Skip this file, we've already counted it
-                        file_size = 0;
-                    }
+                if tx.send(entry).is_err() {
+                    break; // Receiver dropped
                 }
             }
 
-            // Only process if we have a size to add
-            if file_size > 0 {
-                let mut current = entry.path();
+            count
+        })
+    };
 
-                // Bubble up file size to each ancestor directory
-                while let Some(parent) = current.parent() {
-                    if !parent.starts_with(base) {
-                        break;
+    // Process files in parallel using a thread pool
+
+    // Spawn worker threads to process files from the channel
+    let num_workers = num_cpus::get().min(8); // Limit to 8 threads max
+    let mut worker_handles = Vec::with_capacity(num_workers);
+
+    for _ in 0..num_workers {
+        let rx = rx.clone();
+        let sizes = Arc::clone(&sizes);
+        let seen_inodes = Arc::clone(&seen_inodes);
+        let file_count = Arc::clone(&file_count);
+
+        let base_path = base_path.clone();
+
+        let handle = thread::spawn(move || {
+            while let Ok(entry) = rx.recv() {
+                if let Ok(metadata) = entry.metadata() {
+                    let mut file_size = metadata.len();
+                    file_count.fetch_add(1, Ordering::Relaxed);
+
+                    // Check for hardlinks to avoid double-counting (Unix only)
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::MetadataExt;
+                        let inode = metadata.ino();
+                        let device = metadata.dev();
+                        let key = (device, inode);
+
+                        // If this inode has multiple links, only count it once
+                        if metadata.nlink() > 1 {
+                            if seen_inodes.insert(key, true).is_some() {
+                                // Skip this file, we've already counted it
+                                file_size = 0;
+                            }
+                        }
                     }
-                    *sizes.entry(parent.to_path_buf()).or_default() += file_size;
-                    current = parent;
+
+                    // Only process if we have a size to add
+                    if file_size > 0 {
+                        let mut current = entry.path();
+
+                        // Bubble up file size to each ancestor directory
+                        while let Some(parent) = current.parent() {
+                            if !parent.starts_with(&base_path) {
+                                break;
+                            }
+                            // Use DashMap's entry API for atomic updates
+                            // Clone PathBuf only when necessary (when inserting new entry)
+                            match sizes.get_mut(parent) {
+                                Some(mut existing_size) => {
+                                    *existing_size += file_size;
+                                }
+                                None => {
+                                    sizes.insert(parent.to_path_buf(), file_size);
+                                }
+                            }
+                            current = parent;
+                        }
+                    }
                 }
             }
-        }
+        });
 
-        // Update progress
-        if let Some(ref pb) = processing_pb {
-            pb.set_position((i + 1) as u64);
-        }
+        worker_handles.push(handle);
     }
 
-    if let Some(pb) = processing_pb {
-        pb.finish_with_message("Processing complete!");
+    // Drop the sender to signal completion
+    drop(tx);
+
+    // Wait for the walker thread to complete
+    let _total_files = walker_thread.join().unwrap_or(0);
+
+    // Wait for all worker threads to complete
+    for handle in worker_handles {
+        let _ = handle.join();
     }
+
+    // Convert DashMap to HashMap for return
+    let final_sizes: HashMap<PathBuf, u64> = Arc::try_unwrap(sizes)
+        .unwrap_or_else(|_| panic!("Failed to unwrap Arc"))
+        .into_iter()
+        .collect();
+    let final_file_count = file_count.load(Ordering::Relaxed);
 
     // Ensure the base directory is present even if empty
-    sizes.entry(base.to_path_buf()).or_insert(0);
-    (sizes, files.len())
+    let mut result_sizes = final_sizes;
+    result_sizes.entry(base.to_path_buf()).or_insert(0);
+
+    let duration = start_time.elapsed();
+    (result_sizes, final_file_count, duration)
 }
 
 #[cfg(test)]
@@ -258,12 +307,12 @@ mod tests {
         std::fs::write(file_path, "hello world").unwrap(); // 11 bytes
 
         // First scan without cache
-        let (sizes1, files1) = compute_dir_sizes_with_cache(dir.path(), true, false, 24);
+        let (sizes1, files1, _) = compute_dir_sizes_with_cache(dir.path(), true, false, 24);
         assert_eq!(sizes1.get(dir.path()), Some(&11));
         assert_eq!(files1, 1);
 
         // Second scan with cache enabled - should produce same results
-        let (sizes2, files2) = compute_dir_sizes_with_cache(dir.path(), true, true, 24);
+        let (sizes2, files2, _) = compute_dir_sizes_with_cache(dir.path(), true, true, 24);
         assert_eq!(sizes2.get(dir.path()), Some(&11));
         assert_eq!(files2, 1);
 

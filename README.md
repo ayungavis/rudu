@@ -11,13 +11,13 @@ A fast, parallel Rust CLI tool for analyzing directory sizes and finding the lar
 
 ## Features
 
-- 🚀 **Fast parallel processing** using Rayon for concurrent directory traversal
+- 🚀 **Fast parallel processing** with multi-threaded file processing and streaming architecture
 - 📊 **Human-readable output** with formatted file sizes (KB, MB, GB, etc.)
 - 🎯 **Top-N results** - show only the largest directories that matter
 - 🛡️ **Safe symlink handling** - doesn't follow symbolic links to prevent infinite loops
 - 📁 **Flexible path input** - analyze any directory, defaults to root (`/`)
 - 🔧 **Simple CLI interface** with sensible defaults
-- 📈 **Two-phase progress** - counting files and processing with visual progress bars
+- ⚡ **Fast scanning** - efficient directory traversal with timing information
 - 🎨 **Clean output** - shows relative paths without base directory prefix
 - 🔗 **Hardlink detection** - avoids double-counting hardlinked files
 - 🌈 **Colorful output** - beautiful colors and emojis for enhanced visual experience
@@ -165,7 +165,7 @@ rudu -n 20 /var/log
 # Show top 5 largest directories with long flag
 rudu --number 5 /usr/local
 
-# Disable progress bar for scripting
+# Suppress informational messages for scripting
 rudu --quiet /home/user
 
 # Short form of quiet mode
@@ -188,8 +188,6 @@ rudu --clear-cache
 
 ```
 🔍 Scanning directory: /home/user/Documents
-⠂ Counting files... 2847 found
-⠒ Processing [00:00:02] [########################################] 2847/2847 files (0s)
 💾 Cached results for /home/user/Documents
 🔥  1.    1.2 GB  Videos
 📦  2.  456.7 MB  Photos
@@ -200,6 +198,7 @@ rudu --clear-cache
 📊 Summary of /home/user/Documents
 💾 Total file size: 2.4 GB
 📋 Total files: 2847
+⏱️  Time taken: 125.43ms
 ```
 
 _Note: The actual output includes beautiful colors and emojis that enhance the visual experience!_
@@ -208,7 +207,7 @@ _Note: The actual output includes beautiful colors and emojis that enhance the v
 
 - `path` - Root directory to analyze (default: `/`)
 - `-n, --number <NUMBER>` - Number of top results to show (default: 10)
-- `-q, --quiet` - Disable progress bar for scripting
+- `-q, --quiet` - Suppress informational messages for scripting
 - `-c, --cache` - Enable caching for faster subsequent scans
 - `--cache-age <HOURS>` - Maximum cache age in hours (default: 24)
 - `--cache-stats` - Show cache statistics
@@ -219,7 +218,7 @@ _Note: The actual output includes beautiful colors and emojis that enhance the v
 ## How It Works
 
 1. **Recursive Traversal**: Uses `walkdir` to recursively walk through all files in the directory tree
-2. **Progress Tracking**: Shows real-time progress with file count and estimated completion time
+2. **Performance Tracking**: Measures and displays scan time for performance monitoring
 3. **Hardlink Detection**: Identifies and avoids double-counting hardlinked files using inode tracking
 4. **Size Aggregation**: For each file, adds its size to all ancestor directories up to the root
 5. **Parallel Sorting**: Uses Rayon to sort results in parallel for better performance
@@ -285,6 +284,8 @@ Rudu provides different performance characteristics compared to the standard `du
 
 For detailed benchmark results comparing rudu with `du`, see [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
+For technical details about performance optimizations, see [docs/OPTIMIZATIONS.md](docs/OPTIMIZATIONS.md).
+
 ## Development
 
 ### Prerequisites
@@ -336,7 +337,7 @@ cargo test test_nested_dirs
 - **humansize** - Human-readable file size formatting
 - **rayon** - Data parallelism for sorting
 - **tempfile** - Temporary file handling for tests
-- **indicatif** - Progress bars and spinners for terminal applications
+
 - **colored** - Terminal color and styling support
 - **serde** - Serialization framework for cache data
 - **serde_json** - JSON serialization for cache storage
@@ -461,7 +462,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Completed ✅
 
-- [x] Add progress bar for large directory scans
+- [x] Add timing information to track scan performance
 - [x] Colorful output with emojis
 - [x] Smart caching system
 - [x] Cache management tools
